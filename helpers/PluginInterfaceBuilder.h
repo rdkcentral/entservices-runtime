@@ -34,18 +34,16 @@ namespace Plugin {
     template <typename INTERFACE>
     class PluginInterfaceRef {
         INTERFACE* _interface;
-        PluginHost::IShell* _controller;
+        PluginHost::IShell* _service;
 
     public:
         PluginInterfaceRef()
             : _interface(nullptr)
-            , _controller(nullptr)
         {
         }
 
         PluginInterfaceRef(INTERFACE* interface, PluginHost::IShell* controller)
             : _interface(interface)
-            , _controller(controller)
         {
         }
 
@@ -61,19 +59,15 @@ namespace Plugin {
         // use move
         PluginInterfaceRef(PluginInterfaceRef&& other)
             : _interface(other._interface)
-            , _controller(other._controller)
         {
             other._interface = nullptr;
-            other._controller = nullptr;
         }
 
         PluginInterfaceRef& operator=(PluginInterfaceRef&& other)
         {
             if (this != &other) {
                 _interface = other._interface;
-                _controller = other._controller;
                 other._interface = nullptr;
-                other._controller = nullptr;
             }
             return *this;
         }
@@ -88,21 +82,11 @@ namespace Plugin {
             return _interface;
         }
 
-        inline PluginHost::IShell* controller()
-        {
-            return _controller;
-        }
-
         void Reset()
         {
             if (_interface) {
                 _interface->Release();
                 _interface = nullptr;
-            }
-
-            if (_controller) {
-                _controller->Release();
-                _controller = nullptr;
             }
         }
     };
@@ -115,13 +99,13 @@ namespace Plugin {
     INTERFACE* createInterface(PluginInterfaceBuilder<INTERFACE>& builder)
     {
         WPEFramework::PluginHost::IShell* controller = builder.controller();
-
+        const std::string& callsign = builder.callSign();
         if (!controller) {
             LOGERR("Invalid controller");
             return nullptr;
         }
 
-        auto pluginInterface = controller->QueryInterface<INTERFACE>();
+        auto pluginInterface = controller->QueryInterfaceByCallsign<INTERFACE>(callsign.c_str());
 
         if (pluginInterface) {
             pluginInterface->AddRef();
@@ -139,17 +123,15 @@ namespace Plugin {
     template <typename INTERFACE>
     class PluginInterfaceBuilder {
 
-        Core::ProxyType<RPC::CommunicatorClient>& _communicatorClient;
         const std::string _callsign;
-        PluginHost::IShell* _controller;
+        PluginHost::IShell* _service;
         uint32_t _version;
         uint32_t _timeout;
 
     public:
-        PluginInterfaceBuilder(Core::ProxyType<RPC::CommunicatorClient>& communicatorClient, const char* callsign)
-            : _communicatorClient(communicatorClient)
-            , _callsign(callsign)
-            , _controller(nullptr)
+        PluginInterfaceBuilder(const char* callsign)
+            : _callsign(callsign)
+            , _service(nullptr)
             , _version(static_cast<uint32_t>(~0))
             , _timeout(3000)
         {
@@ -170,7 +152,13 @@ namespace Plugin {
             return *this;
         }
 
-        PluginInterfaceRef<INTERFACE> createInterface(void)
+        inline PluginInterfaceBuilder& withIShell(PluginHost::IShell * service)
+        {
+            _service = service;
+            return *this;
+        }
+
+        PluginInterfaceRef<INTERFACE> createInterface()
         {
             auto* interface = ::WPEFramework::Plugin::createInterface<INTERFACE>(*this);
 
@@ -179,37 +167,17 @@ namespace Plugin {
             }
 
             // pass on the ownership of controller to interfaceRef
-            return std::move(PluginInterfaceRef<INTERFACE>(interface, _controller));
+            return std::move(PluginInterfaceRef<INTERFACE>(interface, _service));
         }
 
-        inline Core::ProxyType<RPC::CommunicatorClient>& communicator()
+        const std::string& callSign() const
         {
-            return _communicatorClient;
+            return _callsign;
         }
 
         WPEFramework::PluginHost::IShell* controller()
         {
-            do {
-                if (!_communicatorClient.IsValid()) {
-                    LOGWARN("Invalid _communicatorClient");
-                    break;
-                }
-                LOGINFO("Connect to COM-RPC socket for %s", _callsign.c_str());
-                if (!_controller) {
-                    _controller = _communicatorClient->Open<PluginHost::IShell>(_callsign.c_str(), _version, _timeout);
-                }
-
-                if (!_controller) {
-                    LOGERR("Failed to create controller for %s", _callsign.c_str());
-                    break;
-                }
-
-                // success case
-                return _controller;
-            } while (false);
-
-            // failure case
-            return nullptr;
+            return _service;
         }
     };
 

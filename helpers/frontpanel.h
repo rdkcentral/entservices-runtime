@@ -97,7 +97,7 @@ namespace WPEFramework
         class CFrontPanel
         {
         public:
-            static CFrontPanel* instance();
+            static CFrontPanel* instance(PluginHost::IShell *service = nullptr);
             bool start();
             bool stop();
             std::string getLastError();
