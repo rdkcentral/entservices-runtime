@@ -84,8 +84,6 @@ namespace WPEFramework
         static int m_currentBlinkListIndex = 0;
         static std::vector<std::string> m_lights;
         static device::List <device::FrontPanelIndicator> fpIndicators;
-        static Core::ProxyType<RPC::InvokeServerType<1, 0, 4> > _engine;
-        static Core::ProxyType<RPC::CommunicatorClient> _communicatorClient;
         static PowerManagerInterfaceRef _powerManagerPlugin;
 
         static Core::TimerType<BlinkInfo> blinkTimer(64 * 1024, "BlinkTimer");
@@ -127,19 +125,18 @@ namespace WPEFramework
             : m_blinkTimer(this)
             , m_isBlinking(false)
         {
-            _engine = Core::ProxyType<RPC::InvokeServerType<1, 0, 4>>::Create();
-            _communicatorClient = Core::ProxyType<RPC::CommunicatorClient>::Create(Core::NodeId("/tmp/communicator"), Core::ProxyType<Core::IIPCServer>(_engine));
-
-            _powerManagerPlugin = PowerManagerInterfaceBuilder(_communicatorClient, _T("org.rdk.PowerManager"))
-                                      .withTimeout(3000)
-                                      .withVersion(~0)
-                                      .createInterface();
         }
 
-        CFrontPanel* CFrontPanel::instance()
+        CFrontPanel* CFrontPanel::instance(PluginHost::IShell *service)
         {
             if (!initDone)
             {
+                if (nullptr != service)
+                {
+                    _powerManagerPlugin = PowerManagerInterfaceBuilder(_T("org.rdk.PowerManager"))
+                                      .withIShell(service)
+                                      .createInterface();
+                }
                 if (!s_instance)
                     s_instance = new CFrontPanel;
 #ifdef USE_DS
