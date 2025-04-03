@@ -36,7 +36,7 @@ git clone --branch main https://github.com/rdkcentral/entservices-apis.git
 
 git clone https://github.com/rdkcentral/entservices-runtime.git
 
-git clone --branch R4_4 https://$GITHUB_TOKEN@github.com/rdkcentral/entservices-testframework.git
+git clone https://$GITHUB_TOKEN@github.com/rdkcentral/entservices-testframework.git
 
 ############################
 # Build Thunder-Tools
@@ -204,7 +204,6 @@ cmake -G Ninja -S entservices-runtime -B build/entservices-runtime \
                       -include ${PWD}/entservices-testframework/Tests/mocks/gdialservice.h \
                       -include ${PWD}/entservices-testframework/Tests/mocks/wpa_ctrl_mock.h \
                       -include ${PWD}/entservices-testframework/Tests/mocks/secure_wrappermock.h \
-                      -include ${PWD}/entservices-testframework/Tests/mocks/BluetoothMgr.h \
                       --coverage -Wall -Werror -Wno-error=format \
                       -Wl,-wrap,system -Wl,-wrap,popen -Wl,-wrap,syslog -Wl,-wrap,wpa_ctrl_open -Wl,-wrap,wpa_ctrl_request -Wl,-wrap,wpa_ctrl_close -Wl,-wrap,wpa_ctrl_pending -Wl,-wrap,wpa_ctrl_recv -Wl,-wrap,wpa_ctrl_attach \
                       -DENABLE_TELEMETRY_LOGGING -DUSE_IARMBUS \
@@ -216,7 +215,7 @@ cmake -G Ninja -S entservices-runtime -B build/entservices-runtime \
   -DRDK_SERVICES_COVERITY=ON \
   -DRDK_SERVICES_L1_TEST=ON \
   -DDS_FOUND=ON \
-  -DPLUGIN_BLUETOOTH=ON \
+  -DPLUGIN_WEBKITBROWSER=ON \
 
 
 cmake --build build/entservices-runtime --target install
