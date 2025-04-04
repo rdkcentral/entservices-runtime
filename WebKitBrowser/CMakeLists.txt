@@ -269,9 +269,6 @@ add_library(${PLUGIN_WEBKITBROWSER_IMPLEMENTATION} SHARED
     Tags.cpp
     )
 
-if(NOT WEBKIT_GLIB_API)
-    target_sources(${PLUGIN_WEBKITBROWSER_IMPLEMENTATION} PRIVATE InjectedBundle/Utils.cpp)
-endif()
 
 target_link_libraries(${PLUGIN_WEBKITBROWSER_IMPLEMENTATION}
     PRIVATE
@@ -301,9 +298,7 @@ if(WPE_WEBKIT_DEPRECATED_API)
     target_compile_definitions(${PLUGIN_WEBKITBROWSER_IMPLEMENTATION} PRIVATE WPE_WEBKIT_DEPRECATED_API)
 endif()
 
-if(WEBKIT_GLIB_API)
-    target_compile_definitions(${PLUGIN_WEBKITBROWSER_IMPLEMENTATION} PRIVATE WEBKIT_GLIB_API)
-endif()
+target_compile_definitions(${PLUGIN_WEBKITBROWSER_IMPLEMENTATION} PRIVATE WEBKIT_GLIB_API)
 
 if(PLUGIN_WEBKITBROWSER_USE_EXACT_PATHS)
     target_compile_definitions(${PLUGIN_WEBKITBROWSER_IMPLEMENTATION} PRIVATE USE_EXACT_PATHS)
@@ -324,12 +319,7 @@ install(
     DESTINATION ${CMAKE_INSTALL_PREFIX}/lib/${STORAGE_DIRECTORY}/plugins
     COMPONENT ${PROJECT_NAME})
 
-if(WEBKIT_GLIB_API)
-    add_subdirectory(Extension)
-else()
-    # also build injected bundle
-    add_subdirectory(InjectedBundle)
-endif()
+add_subdirectory(Extension)
 
 # resolution handling
 if(PLUGIN_WEBKITBROWSER_RESOLUTION EQUAL "720p")
@@ -365,26 +355,6 @@ else()
 endif()
 
 write_config( ${PLUGIN_NAME} )
-
-# youtube configuration
-if(PLUGIN_WEBKITBROWSER_YOUTUBE)
-    write_config( YouTube )
-endif()
-
-# amazon configuration
-if(PLUGIN_AMAZON_HYBRID)
-    write_config( Amazon )
-endif()
-
-# Applications instance configuration
-if(PLUGIN_WEBKITBROWSER_APPS)
-    write_config( Apps )
-endif()
-
-# UX configuration
-if(PLUGIN_WEBKITBROWSER_UX)
-    write_config( UX )
-endif()
 
 # Search&Discovery configuration
 if(PLUGIN_WEBKITBROWSER_SEARCH_AND_DISCOVERY_APP)
