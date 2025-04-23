@@ -23,7 +23,6 @@
 #define API_VERSION_NUMBER_MINOR 1
 #define API_VERSION_NUMBER_PATCH 16
 
-
 namespace WPEFramework {
 
 namespace {
