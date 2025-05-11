@@ -215,7 +215,7 @@ cmake -G Ninja -S entservices-runtime -B build/entservices-runtime \
   -DRDK_SERVICES_COVERITY=ON \
   -DRDK_SERVICES_L1_TEST=ON \
   -DDS_FOUND=ON \
-  -DPLUGIN_PERFORMANCEMETRICS=ON \
+  -DPLUGIN_WEBKITBROWSER=ON \
 
 
 cmake --build build/entservices-runtime --target install
