@@ -192,7 +192,6 @@ public:
                                         _callsign.c_str(), 
                                         URL.c_str(),
                                         (success == true ? _T("successfully") : _T("unsuccessfully")),
-                                        totalsuccess,
                                         totalfailed,
                                         rss));
         }
