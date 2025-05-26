@@ -104,7 +104,7 @@ namespace Plugin {
         PluginHost::IStateControl* statecontrol = service.QueryInterface<PluginHost::IStateControl>();
 
         if( webbrowser != nullptr ) {
-            TRACE(Trace::Information, (_T("Start oberserving %s as webbrowser"), Callsign().c_str()) );
+            TRACE(Trace::Information, (_T("Start oberserving %s as webbrowser")) );
             _observable = Core::ProxyType<WebBrowserObservable<>>::Create(*this, service, *webbrowser, statecontrol);
             webbrowser->Release();
         } else {
