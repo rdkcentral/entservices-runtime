@@ -7,132 +7,18 @@ on:
       - test_develop
 
 jobs:
-  check_linked_prs_merged:
+  debug_check:
     runs-on: ubuntu-latest
-    outputs:
-      proceed: ${{ steps.check.outputs.proceed }}
     steps:
-      - name: Check if all linked PRs are merged
-        id: check
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REPO: ${{ github.repository }}
-        run: |
-          pip install PyGithub
-          python <<'EOF'
-          import os, sys, requests
-          from github import Github
-          token = os.environ['GITHUB_TOKEN']
-          repo_name = os.environ['REPO']
-          pr_number = int(os.environ['PR_NUMBER'])
-          print(f"[DEBUG] Token: {'set' if token else 'not set'}")
-          print(f"[DEBUG] Repo: {repo_name}, PR number: {pr_number}")
-          g = Github(token)
-          repo = g.get_repo(repo_name)
-          pr = repo.get_pull(pr_number)
-          owner, repo_short = repo_name.split('/')
-          headers = {'Authorization': f'bearer {token}'}
-          proceed = 'true'
-
-          # GraphQL query to get issues officially linked to this PR
-          query = """
-          query($owner: String!, $repo: String!, $pr: Int!) {
-            repository(owner: $owner, name: $repo) {
-              pullRequest(number: $pr) {
-                closingIssuesReferences(first: 10) {
-                  nodes {
-                    number
-                  }
-                }
-              }
-            }
-          }
-          """
-          variables = {
-              'owner': owner,
-              'repo': repo_short,
-              'pr': pr_number
-          }
-          r = requests.post(
-              'https://api.github.com/graphql',
-              json={'query': query, 'variables': variables},
-              headers=headers
-          )
-          data = r.json()
-          print(f"[DEBUG] GraphQL response for linked issues: {data}")
-          issue_nodes = data.get('data', {}).get('repository', {}).get('pullRequest', {}).get('closingIssuesReferences', {}).get('nodes', [])
-          linked_issues = [n['number'] for n in issue_nodes]
-          print(f"[DEBUG] Officially linked issues: {linked_issues}")
-
-
-          # Only check the first linked issue (if any)
-          if linked_issues:
-              issue_number = linked_issues[0]
-              issue_query = """
-              query($owner: String!, $repo: String!, $issue: Int!) {
-                repository(owner: $owner, name: $repo) {
-                  issue(number: $issue) {
-                    timelineItems(last: 100, itemTypes: [CONNECTED_EVENT]) {
-                      nodes {
-                        ... on ConnectedEvent {
-                          subject {
-                            __typename
-                            ... on PullRequest {
-                              number
-                              merged
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-              """
-              variables = {
-                  'owner': owner,
-                  'repo': repo_short,
-                  'issue': int(issue_number)
-              }
-              r2 = requests.post(
-                  'https://api.github.com/graphql',
-                  json={'query': issue_query, 'variables': variables},
-                  headers=headers
-              )
-              data2 = r2.json()
-              print(f"[DEBUG] GraphQL response for PRs linked to issue {issue_number}: {data2}")
-              issue_obj = data2.get('data', {}).get('repository', {}).get('issue')
-              if not issue_obj:
-                  print(f"[DEBUG] Issue {issue_number} not found or inaccessible, skipping.")
-              else:
-                  nodes = issue_obj.get('timelineItems', {}).get('nodes', [])
-                  linked_prs = []
-                  for node in nodes:
-                      subject = node.get('subject', {})
-                      if subject.get('__typename') == 'PullRequest':
-                          linked_prs.append({
-                              'number': subject['number'],
-                              'merged': subject['merged']
-                          })
-                  print(f"[DEBUG] PRs linked to issue {issue_number}: {linked_prs}")
-                  if not linked_prs:
-                      linked_prs = [{'number': pr_number, 'merged': pr.merged}]
-                  for pr_info in linked_prs:
-                      print(f"[DEBUG] Checking PR #{pr_info['number']} merged status: {pr_info['merged']}")
-                      if not pr_info['merged']:
-                          print(f"PR #{pr_info['number']} is not merged. Skipping workflow.")
-                          proceed = 'false'
-                          break
-
-          print(f"[DEBUG] Final proceed value: {proceed}")
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
-              fh.write(f'proceed={proceed}\n')
-          EOF
-
+      - run: echo "Triggered" 
+      
   call_auto_pr_workflow:
-    needs: check_linked_prs_merged
-    if: needs.check_linked_prs_merged.outputs.proceed == 'true'
+    #secrets:
+      #RDKCM_RDKE: ${{ secrets.RDKCM_RDKE }}
     uses: rdkcentral/build_tools_workflows/.github/workflows/auto_pr_creation_meta.yml@RDKEMW-4778
     secrets:
       RDKCM_RDKE: ${{ secrets.RDKCM_RDKE }}
+    #runs-on: ubuntu-latest
+    #steps:
+     # - name: Print placeholder instead of actual logic
+     #   run: echo "This is a placeholder for the actual logic."
