@@ -22,8 +22,8 @@ jobs:
 
       - name: Set up Git
         run: |
-          git config user.name "bot"
-          git config user.email "$BOT_EMAIL"
+          git config --global user.name "bot"
+          git config --global user.email "$BOT_EMAIL"
 
       - name: Install git-flow and auto-changelog
         run: |
