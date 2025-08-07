@@ -8,7 +8,9 @@ on:
     types: [closed]
     branches:
       - develop
-
+env:
+  BOT_EMAIL: ${{ vars.RDKM_BOT_EMAIL }}
+  
 jobs:
   release:
     if: github.event.pull_request.merged == true
@@ -20,8 +22,8 @@ jobs:
 
       - name: Set up Git
         run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
+          git config user.name "bot"
+          git config user.email "$BOT_EMAIL"
 
       - name: Install git-flow and auto-changelog
         run: |
