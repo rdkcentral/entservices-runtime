@@ -631,6 +631,7 @@ static GSourceFuncs _handlerIntervention =
                 , WebAudioEnabled(false)
                 , ServiceWorkerEnabled(false)
                 , ICECandidateFilteringEnabled()
+                , MediaCapabilitiesEnabled(true)
             {
                 Add(_T("useragent"), &UserAgent);
                 Add(_T("url"), &URL);
@@ -699,6 +700,7 @@ static GSourceFuncs _handlerIntervention =
                 Add(_T("webaudio"), &WebAudioEnabled);
                 Add(_T("serviceworker"), &ServiceWorkerEnabled);
                 Add(_T("icecandidatefiltering"), &ICECandidateFilteringEnabled);
+                Add(_T("mediacapabilitiesenabled"), &MediaCapabilitiesEnabled);
             }
             ~Config()
             {
@@ -772,6 +774,7 @@ static GSourceFuncs _handlerIntervention =
             Core::JSON::Boolean WebAudioEnabled;
             Core::JSON::Boolean ServiceWorkerEnabled;
             Core::JSON::Boolean ICECandidateFilteringEnabled;
+            Core::JSON::Boolean MediaCapabilitiesEnabled;
         };
 
         class HangDetector
@@ -2963,6 +2966,9 @@ static GSourceFuncs _handlerIntervention =
             webkit_settings_set_enable_media_stream(preferences, TRUE);
             webkit_settings_set_enable_page_cache(preferences, FALSE);
             webkit_settings_set_enable_directory_upload(preferences, FALSE);
+#if WEBKIT_CHECK_VERSION(2, 46, 0)
+            webkit_settings_set_enable_media_capabilities(preferences, _config.MediaCapabilitiesEnabled.Value());
+#endif
 
 #if WEBKIT_CHECK_VERSION(2, 38, 0)
             webkit_settings_set_enable_webrtc(preferences, TRUE);
