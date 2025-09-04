@@ -31,6 +31,7 @@ cmake -G Ninja -S "$GITHUB_WORKSPACE" -B build/entservices-runtime \
 -I ${GITHUB_WORKSPACE}/entservices-testframework/Tests/headers/rdk/iarmmgrs-hal \
 -I ${GITHUB_WORKSPACE}/entservices-testframework/Tests/headers/ccec/drivers \
 -I ${GITHUB_WORKSPACE}/entservices-testframework/Tests/headers/network \
+-I /usr/include/libdrm \
 -include ${GITHUB_WORKSPACE}/entservices-testframework/Tests/mocks/devicesettings.h \
 -include ${GITHUB_WORKSPACE}/entservices-testframework/Tests/mocks/Iarm.h \
 -include ${GITHUB_WORKSPACE}/entservices-testframework/Tests/mocks/Rfc.h \

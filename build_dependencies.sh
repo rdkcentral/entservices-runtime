@@ -155,8 +155,6 @@ touch telemetry_busmessage_sender.h
 touch maintenanceMGR.h
 touch pkg.h
 touch edid-parser.hpp
-touch drm.h
-touch drm_mode.h
 touch secure_wrapper.h
 touch wpa_ctrl.h
 touch btmgr.h
