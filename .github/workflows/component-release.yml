@@ -11,23 +11,19 @@ on:
 
 jobs:
   validate-version:
-    if: contains(fromJSON('["opened", "edited", "ready_for_review"]'), github.event.action)
+    if: ${{ github.event.action == 'opened' || github.event.action == 'edited' || github.event.action == 'ready_for_review' }}
     runs-on: ubuntu-latest
     steps:
       - name: Validate PR description for version field
+        env:
+          PR_DESC: ${{ github.event.pull_request.body }}
         run: |
-          PR_DESC="${{ github.event.pull_request.body }}"
-          if [ -z "$PR_DESC" ]; then
-            echo "ERROR: PR description is empty. Please include a description with 'version: major|minor|patch'."
-            exit 1
-          fi
-          if ! printf '%s\n' "$PR_DESC" | grep -oiP 'version\s*:\s*(major|minor|patch)'; then
-            echo "ERROR: PR description is missing the required field. Please include a description with 'version: major|minor|patch'."
+          if ! echo "$PR_DESC" | grep -qiE 'version[[:space:]]*:[[:space:]]*(major|minor|patch)'; then
+            echo "ERROR: PR description must include a version field in the format 'version: major|minor|patch' (case-insensitive). Example: version: minor"
             exit 1
           fi
           echo "Validation passed: version field found."
   release:
-    needs: validate-version
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
@@ -81,8 +77,8 @@ jobs:
           IFS='.' read -r major minor patch <<< "$TOP_TAG"
           VERSION_TYPE=$(echo "$PR_DESC" | grep -oiP 'version\s*:\s*\K(major|minor|patch)' | tr '[:upper:]' '[:lower:]')
           if [[ -z "$VERSION_TYPE" ]]; then
-            echo "ERROR: PR description must include 'version: major|minor|patch'."
-            exit 1
+            echo "No version type found in PR description, defaulting to PATCH increment."
+            patch=$((patch + 1))
           elif [[ "$VERSION_TYPE" == "major" ]]; then
             major=$((major + 1))
             minor=0
