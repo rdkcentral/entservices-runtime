@@ -351,17 +351,27 @@ public:
             return _URL;
         else {
             startIdx += 3; // skip "://"
+            if (startIdx > _URL.length()) {
+                return _URL;
+            }
             size_t endIdx = _URL.find("/",startIdx);
             if(endIdx == std::string::npos)
                 return _URL.substr(startIdx);
-            else
+            else if (endIdx > startIdx)
                 return _URL.substr(startIdx, endIdx - startIdx);
+            else
+                return _URL;
         }
     }
 
     void LoadFinished(const string& URL, const int32_t, const bool success, const uint32_t totalsuccess, const uint32_t totalfailed) override 
     {
         if( URL != startURL ) {
+            // FIX(Manual Analysis 13): LOGIC - Validate addition for integer overflow
+            uint32_t totalloaded = totalsuccess + totalfailed;
+            if( totalloaded < totalsuccess || totalloaded < totalfailed ) {
+                return; // Overflow detected
+            }
             _adminLock.Lock();
             URLLoadedMetrics metrics(_urloadmetrics);
             _adminLock.Unlock();
@@ -371,9 +381,12 @@ public:
             if(strcmp(getHostName(URL).c_str(), _lastLoggedApp.c_str()))
                 _didLogLaunchMetrics = false;
 
-            OutputLoadFinishedMetrics(metrics, getHostName(URL), urllaunchtime_ms, success, totalsuccess + totalfailed);
+            OutputLoadFinishedMetrics(metrics, getHostName(URL), urllaunchtime_ms, success, totalloaded);
 
+            // FIX(Manual Analysis 10): CONCURRENCY - Protect _timeIdleFirstStart with lock
+            _adminLock.Lock();
             _timeIdleFirstStart = 0; // we only measure on first non about:blank url handling
+            _adminLock.Unlock();
         }
     }
 
@@ -394,7 +407,8 @@ public:
             if( _processmemory != nullptr ) {
                 resident = _processmemory->Resident();
                 uint32_t pid = _processmemory->Identifier();
-                if( pid != 0 ) {
+                // FIX(Manual Analysis 11): SECURITY - Validate PID to prevent path traversal
+                if( pid != 0 && pid < 4194304 ) {
                     metrics.StatmLine(GetProcessStatmLine(pid));
                 }
             } else if ( _memory != nullptr ) {
@@ -443,9 +457,10 @@ private:
         output.Uptime = urloadedmetrics.Uptime();
 
         static const float LA_SCALE = static_cast<float>(1 << SI_LOAD_SHIFT);
-        output.LoadAvarage = std::to_string(urloadedmetrics.AverageLoad()[0] / LA_SCALE).substr(0,4) + " " +
-                             std::to_string(urloadedmetrics.AverageLoad()[1] / LA_SCALE).substr(0,4) + " " +
-                             std::to_string(urloadedmetrics.AverageLoad()[2] / LA_SCALE).substr(0,4);
+        std::string load0 = std::to_string(urloadedmetrics.AverageLoad()[0] / LA_SCALE);
+        std::string load1 = std::to_string(urloadedmetrics.AverageLoad()[1] / LA_SCALE);
+        std::string load2 = std::to_string(urloadedmetrics.AverageLoad()[2] / LA_SCALE);
+        output.LoadAvarage = load0.substr(0, 4) + " " + load1.substr(0, 4) + " " + load2.substr(0, 4);
 
         static const long NPROC_ONLN = sysconf(_SC_NPROCESSORS_ONLN);
         output.NbrProcessors = NPROC_ONLN;
@@ -489,13 +504,8 @@ private:
     string GetProcessStatmLine(const uint32_t pid) 
     {
         string statmLine;
-        std::string procPath = std::string("/proc/") + std::to_string(pid) + "/statm";
-        std::ifstream statmStream(procPath);
-        if (statmStream.is_open() ) {
-            std::getline(statmStream, statmLine);
-            statmStream.close();
-        }
-
+        std::ifstream statmStream(std::string("/proc/") + std::to_string(pid) + "/statm");
+        std::getline(statmStream, statmLine);
         return  statmLine;
     }
 

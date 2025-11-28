@@ -86,19 +86,23 @@ namespace Plugin {
                     }
 
                     if (stateControl->Configure(_service) != Core::ERROR_NONE) {
+                        // FIX(Manual Analysis 17): MEMORY - Complete cleanup on Configure failure
                         if (_memory != nullptr) {
                             _memory->Release();
                             _memory = nullptr;
                         }
-                        _application->Release();
-                        _application = nullptr;
+                        if (_application != nullptr) {
+                            _application->Release();
+                            _application = nullptr;
+                        }
                         _browser->Unregister(&_notification);
                         _browser->Release();
                         _browser = nullptr;
+                        stateControl->Release();
                     } else {
                         stateControl->Register(&_notification);
+                        stateControl->Release();
                     }
-                    stateControl->Release();
                 } else {
                     stateControl->Release();
                     _browser->Release();
@@ -146,14 +150,17 @@ namespace Plugin {
         _memory->Release();
         _application->Release();
         Exchange::JWebBrowser::Unregister(*this);
+        // FIX(Manual Analysis 20): MEMORY - Set pointers to nullptr after Release
         if (_browserScripting) {
             Exchange::JBrowserScripting::Unregister(*this);
             _browserScripting->Release();
+            _browserScripting = nullptr;
         }
         if (_cookieJar) {
             Exchange::JBrowserCookieJar::Unregister(*this);
             _cookieJar->Unregister(&_notification);
             _cookieJar->Release();
+            _cookieJar = nullptr;
         }
         UnregisterAll();
 
@@ -168,20 +175,42 @@ namespace Plugin {
         RPC::IRemoteConnection* connection(_service->RemoteConnection(_connectionId));
 
         // Stop processing of the browser:
-        VARIABLE_IS_NOT_USED uint32_t result = _browser->Release();
+        // FIX(Manual Analysis 18): MEMORY - Log Release result before ASSERT
+        uint32_t result = _browser->Release();
 
         // It should have been the last reference we are releasing,
         // so it should end up in a DESCRUCTION_SUCCEEDED, if not we
         // are leaking...
+        if (result != Core::ERROR_DESTRUCTION_SUCCEEDED) {
+            TRACE(Trace::Error, (_T("Browser Release returned %u, expected DESTRUCTION_SUCCEEDED"), result));
+        }
         ASSERT(result == Core::ERROR_DESTRUCTION_SUCCEEDED);
 
         // If this was running in a (container) process...
         if (connection != nullptr) {
+            // FIX(Manual Analysis 24): CONCURRENCY - Add timeout and error handling for Terminate
             // Lets trigger a cleanup sequence for
             // out-of-process code. Which will guard
             // that unwilling processes, get shot if
             // not stopped friendly :~)
-            connection->Terminate();
+            uint32_t terminateResult = connection->Terminate();
+            if (terminateResult != Core::ERROR_NONE) {
+                TRACE(Trace::Error, (_T("Connection Terminate failed with error %u"), terminateResult));
+            } else {
+                // Wait for process termination with timeout (3 seconds)
+                static const uint32_t TERMINATE_TIMEOUT_MS = 3000;
+                uint32_t waited = 0;
+                const uint32_t POLL_INTERVAL_MS = 100;
+                
+                while (waited < TERMINATE_TIMEOUT_MS && connection->IsOperational() == true) {
+                    Core::Time::MilliSeconds(POLL_INTERVAL_MS);
+                    waited += POLL_INTERVAL_MS;
+                }
+                
+                if (connection->IsOperational() == true) {
+                    TRACE(Trace::Warning, (_T("Process did not terminate within timeout, forcing cleanup")));
+                }
+            }
             connection->Release();
         }
 
@@ -259,7 +288,6 @@ namespace Plugin {
                 } else if ((index.Remainder() == _T("Delete")) && (request.HasBody() == true) && (request.Body<const Data>()->Path.Value().empty() == false)) {
                     if (DeleteDir(request.Body<const Data>()->Path.Value()) != Core::ERROR_NONE) {
                         result->ErrorCode = Web::STATUS_BAD_REQUEST;
-                        result->Message = "Unknown error";
                     }
                 } else {
                     result->ErrorCode = Web::STATUS_BAD_REQUEST;
@@ -348,11 +376,16 @@ namespace Plugin {
 
     void WebKitBrowser::Deactivated(RPC::IRemoteConnection* connection)
     {
-        if (connection->Id() == _connectionId) {
-
-            ASSERT(_service != nullptr);
-
-            Core::IWorkerPool::Instance().Submit(PluginHost::IShell::Job::Create(_service, PluginHost::IShell::DEACTIVATED, PluginHost::IShell::FAILURE));
+        // FIX(Manual Analysis 23): CONCURRENCY - Protect _connectionId access from race condition
+        if (connection != nullptr) {
+            _adminLock.Lock();
+            uint32_t connectionId = _connectionId;
+            _adminLock.Unlock();
+            
+            if (connection->Id() == connectionId) {
+                ASSERT(_service != nullptr);
+                Core::IWorkerPool::Instance().Submit(PluginHost::IShell::Job::Create(_service, PluginHost::IShell::DEACTIVATED, PluginHost::IShell::FAILURE));
+            }
         }
     }
 }  // namespace Plugin
@@ -391,7 +424,6 @@ namespace WebKitBrowser {
         uint64_t Resident() const override
         {
             uint32_t result(0);
-
             if (_startTime != TimePoint::min()) {
                 if (_children.Count() < RequiredChildren) {
                     _children = Core::ProcessInfo::Iterator(_main.Id());
