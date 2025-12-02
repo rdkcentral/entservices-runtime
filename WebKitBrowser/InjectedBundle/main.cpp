@@ -160,13 +160,17 @@ __attribute__((destructor)) static void unload()
 static void InjectInJSWorld(ClassDefinition& classDef, WKBundleFrameRef frame, WKBundleScriptWorldRef scriptWorld)
 {
     JSGlobalContextRef context = WKBundleFrameGetJavaScriptContextForWorld(frame, scriptWorld);
+    if (context == nullptr) {
+        TRACE(Trace::Error, (_T("Failed to get JavaScript context for world")));
+        return;
+    }
 
     ClassDefinition::FunctionIterator function = classDef.GetFunctions();
     uint32_t functionCount = function.Count();
 
     // We need an extra entry that we set to all zeroes, to signal end of data.
     std::vector<JSStaticFunction> staticFunctions;
-    staticFunctions.reserve(functionCount + 1);
+    staticFunctions.resize(functionCount + 1);
 
     int index = 0;
     while (function.Next()) {
