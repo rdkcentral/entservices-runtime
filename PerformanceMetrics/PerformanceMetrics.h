@@ -194,7 +194,16 @@ namespace Plugin {
                         if( _observable.IsValid() == true ) {
                             _observable->Activated(service);
                         }
+                    } catch (const std::exception& e) {
+                        TRACE(Trace::Error, (_T("Exception during Activated: %s"), e.what()));
+                        // Cleanup on exception
+                        if( _observable.IsValid() == true ) {
+                            _observable->Disable();
+                            _observable.Release();
+                        }
+                        throw; // Re-throw to propagate exception
                     } catch (...) {
+                        TRACE(Trace::Error, (_T("Unknown exception during Activated for callsign: %s"), _callsign.c_str()));
                         // Cleanup on exception
                         if( _observable.IsValid() == true ) {
                             _observable->Disable();
@@ -257,13 +266,13 @@ namespace Plugin {
 
             void Deinitialize() override
             {
+                // no lock needed, no notification are possible here.
                 // FIX(Manual Analysis 5): CONCURRENCY - Protect _observers with lock during cleanup
-                _adminLock.Lock();
+
                 for( auto& observer : _observers ) {
                     observer.second.Deinitialize();
                 }
                 _observers.clear();
-                _adminLock.Unlock();
             }
 
             void Activated(PluginHost::IShell& service) override
@@ -275,16 +284,13 @@ namespace Plugin {
                                        std::forward_as_tuple(service.Callsign()));
                     // FIX(Manual Analysis 4): CONCURRENCY - Handle race condition with proper locking
                     ASSERT( ( result.second == true ) && ( result.first != _observers.end() ) );
-                    if( result.first != _observers.end() ) {
-                        if( result.second == true ) {
-                            // New insertion successful - initialize and activate under lock
-                            result.first->second.Initialize();
-                            result.first->second.Activated(service);
-                        } else {
-                            // Collision: callsign already exists, reactivate existing observer under lock
-                            TRACE(Trace::Information, (_T("Observer for %s already exists, reactivating"), service.Callsign().c_str()));
-                            result.first->second.Activated(service);
-                        }
+                    if( result.first != _observers.end() && result.second == true ) {
+                        // New insertion successful - initialize and activate under lock
+                        result.first->second.Initialize();
+                        result.first->second.Activated(service);
+                    } else {
+                        // Collision: callsign already exists - this should not happen in normal operation
+                        TRACE(Trace::Error, (_T("Observer for callsign %s already exists, ignoring duplicate activation"), service.Callsign().c_str()));
                     }
                     // Lock held throughout to prevent race condition between emplace check and method calls
                     _adminLock.Unlock();
@@ -295,7 +301,7 @@ namespace Plugin {
                 if( service.ClassName() == Classname() ) {
                     _adminLock.Lock();
                     auto it =_observers.find(service.Callsign());
-                    // FIX(Manual Analysis 6): CONCURRENCY - Validate iterator before use
+                    // FIX(Manual Analysis 6): CONCURRENCY - Validate iterator before use false postive change is already present
                     if( it != _observers.end() ) {
                         it->second.Deactivated(service);
                         it->second.Deinitialize();

@@ -170,12 +170,14 @@ public:
     void Resumed() override
     {
     }
-
+    
     void Suspended() override
     {
+        uint64_t rss = 0;
         if( _memory != nullptr ) {
-            TRACE(Trace::Metric, (_T("Browser %s suspended, RSS: %llu"), _callsign.c_str(), _memory->Resident()));
+            rss = _memory->Resident();
         }
+        TRACE(Trace::Metric, (_T("Browser %s suspended, RSS: %llu"), _callsign.c_str(), rss));
     }
 
     void LoadFinished(const string& URL, const int32_t, const bool success, const uint32_t totalsuccess, const uint32_t totalfailed) override 

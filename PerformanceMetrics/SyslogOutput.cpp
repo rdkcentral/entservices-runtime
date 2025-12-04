@@ -28,6 +28,7 @@
 #include "UtilsTelemetry.h"
 
 #include <sys/sysinfo.h>
+#defince PID_MAX_LIMIT 32768
 
 namespace WPEFramework {
 namespace Plugin {
@@ -351,7 +352,7 @@ public:
             return _URL;
         else {
             startIdx += 3; // skip "://"
-            if (startIdx > _URL.length()) {
+            if (startIdx >= _URL.length()) {
                 return _URL;
             }
             size_t endIdx = _URL.find("/",startIdx);
@@ -408,7 +409,7 @@ public:
                 resident = _processmemory->Resident();
                 uint32_t pid = _processmemory->Identifier();
                 // FIX(Manual Analysis 11): SECURITY - Validate PID to prevent path traversal
-                if( pid != 0 && pid < 4194304 ) {
+                if( pid != 0 && pid < PID_MAX_LIMIT ) {
                     metrics.StatmLine(GetProcessStatmLine(pid));
                 }
             } else if ( _memory != nullptr ) {
@@ -457,9 +458,9 @@ private:
         output.Uptime = urloadedmetrics.Uptime();
 
         static const float LA_SCALE = static_cast<float>(1 << SI_LOAD_SHIFT);
-        std::string load0 = std::to_string(urloadedmetrics.AverageLoad()[0] / LA_SCALE);
-        std::string load1 = std::to_string(urloadedmetrics.AverageLoad()[1] / LA_SCALE);
-        std::string load2 = std::to_string(urloadedmetrics.AverageLoad()[2] / LA_SCALE);
+        output.LoadAvarage = std::to_string(urloadedmetrics.AverageLoad()[0] / LA_SCALE).substr(0,4) + " " +
+                             std::to_string(urloadedmetrics.AverageLoad()[1] / LA_SCALE).substr(0,4) + " " +
+                             std::to_string(urloadedmetrics.AverageLoad()[2] / LA_SCALE).substr(0,4);
         output.LoadAvarage = load0.substr(0, 4) + " " + load1.substr(0, 4) + " " + load2.substr(0, 4);
 
         static const long NPROC_ONLN = sysconf(_SC_NPROCESSORS_ONLN);
