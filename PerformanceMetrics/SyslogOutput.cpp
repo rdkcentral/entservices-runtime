@@ -504,8 +504,12 @@ private:
     string GetProcessStatmLine(const uint32_t pid) 
     {
         string statmLine;
-        std::ifstream statmStream(std::string("/proc/") + std::to_string(pid) + "/statm");
-        std::getline(statmStream, statmLine);
+        std::string procPath = std::string("/proc/") + std::to_string(pid) + "/statm";
+        std::ifstream statmStream(procPath);
+        if (statmStream.is_open() ) {
+            std::getline(statmStream, statmLine);
+            statmStream.close();
+        }
         return  statmLine;
     }
 
