@@ -90,12 +90,6 @@ static std::vector<uint8_t> compress(const std::string& str)
     }
     const int compressionLevel = 1;
     unsigned long len = nbytes + nbytes / 100 + 13;
-    // FIX(Manual Analysis 26): MEMORY - Validate compression buffer size
-    if (len > 10485760) { // 10MB sanity limit
-        TRACE_GLOBAL(Trace::Error,(_T("Compression buffer too large: %lu"), len));
-        result.resize(0);
-        return result;
-    }
     int status;
     do
     {
@@ -140,11 +134,6 @@ static std::string uncompress(const std::vector<uint8_t>& in)
     unsigned long expectedSize = (unsigned long)(
         (data[0] << 24) | (data[1] << 16) |
         (data[2] <<  8) | (data[3]));
-    // FIX(Manual Analysis 27): MEMORY - Validate expectedSize before allocation
-    if (expectedSize > 10485760) { // 10MB sanity limit
-        TRACE_GLOBAL(Trace::Error,(_T("Expected size too large: %lu"), expectedSize));
-        return result;
-    }
     unsigned long len = std::max(expectedSize, 1ul);
     int status;
     do
@@ -226,11 +215,6 @@ struct CookieJar::CookieJarPrivate
     {
         uint32_t rc = Core::ERROR_GENERAL;
         std::vector<uint8_t> decrypted;
-        // FIX(Manual Analysis 30): MEMORY - Validate payload size before decode
-        if (payload.length() > 20971520) { // 20MB base64 encoded limit (~15MB decoded)
-            TRACE_GLOBAL(Trace::Error,(_T("Payload too large: %zu"), payload.length()));
-            return Core::ERROR_GENERAL;
-        }
 
         rc = _cookieJarCrypto.Decrypt(fromBase64(payload), version, decrypted);
 

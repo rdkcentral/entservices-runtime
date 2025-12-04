@@ -201,7 +201,6 @@ namespace Plugin {
                             _observable->Disable();
                             _observable.Release();
                         }
-                        throw; // Re-throw to propagate exception
                     } catch (...) {
                         TRACE(Trace::Error, (_T("Unknown exception during Activated for callsign: %s"), _callsign.c_str()));
                         // Cleanup on exception
@@ -209,7 +208,6 @@ namespace Plugin {
                             _observable->Disable();
                             _observable.Release();
                         }
-                        throw; // Re-throw to propagate exception
                     }
                 }
             }
@@ -267,8 +265,6 @@ namespace Plugin {
             void Deinitialize() override
             {
                 // no lock needed, no notification are possible here.
-                // FIX(Manual Analysis 5): CONCURRENCY - Protect _observers with lock during cleanup
-
                 for( auto& observer : _observers ) {
                     observer.second.Deinitialize();
                 }

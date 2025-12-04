@@ -28,7 +28,7 @@
 #include "UtilsTelemetry.h"
 
 #include <sys/sysinfo.h>
-#define PID_MAX_LIMIT 32768
+#define PID_MAX_LIMIT 4194304
 
 namespace WPEFramework {
 namespace Plugin {
@@ -383,10 +383,7 @@ public:
 
             OutputLoadFinishedMetrics(metrics, getHostName(URL), urllaunchtime_ms, success, totalloaded);
 
-            // FIX(Manual Analysis 10): CONCURRENCY - Protect _timeIdleFirstStart with lock
-            _adminLock.Lock();
             _timeIdleFirstStart = 0; // we only measure on first non about:blank url handling
-            _adminLock.Unlock();
         }
     }
 
@@ -460,6 +457,7 @@ private:
         output.LoadAvarage = std::to_string(urloadedmetrics.AverageLoad()[0] / LA_SCALE).substr(0,4) + " " +
                              std::to_string(urloadedmetrics.AverageLoad()[1] / LA_SCALE).substr(0,4) + " " +
                              std::to_string(urloadedmetrics.AverageLoad()[2] / LA_SCALE).substr(0,4);
+
         static const long NPROC_ONLN = sysconf(_SC_NPROCESSORS_ONLN);
         output.NbrProcessors = NPROC_ONLN;
 
