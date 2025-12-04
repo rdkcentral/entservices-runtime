@@ -301,7 +301,7 @@ namespace Plugin {
                 if( service.ClassName() == Classname() ) {
                     _adminLock.Lock();
                     auto it =_observers.find(service.Callsign());
-                    // FIX(Manual Analysis 6): CONCURRENCY - Validate iterator before use false postive change is already present
+                    // Validate iterator before use to ensure the observer exists and avoid dereferencing an invalid iterator.
                     if( it != _observers.end() ) {
                         it->second.Deactivated(service);
                         it->second.Deinitialize();

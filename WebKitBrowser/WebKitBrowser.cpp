@@ -179,9 +179,6 @@ namespace Plugin {
         // It should have been the last reference we are releasing,
         // so it should end up in a DESCRUCTION_SUCCEEDED, if not we
         // are leaking...
-        // if (result != Core::ERROR_DESTRUCTION_SUCCEEDED) {
-        //     TRACE(Trace::Error, (_T("Browser Release returned %u, expected DESTRUCTION_SUCCEEDED"), result));
-        // }
         ASSERT(result == Core::ERROR_DESTRUCTION_SUCCEEDED);
 
         // If this was running in a (container) process...
@@ -358,7 +355,6 @@ namespace Plugin {
 
     void WebKitBrowser::Deactivated(RPC::IRemoteConnection* connection)
     {
-        // FIX(Manual Analysis 23 false design): CONCURRENCY - Protect _connectionId access from race condition
         if (connection->Id() == _connectionId) {
 
             ASSERT(_service != nullptr);

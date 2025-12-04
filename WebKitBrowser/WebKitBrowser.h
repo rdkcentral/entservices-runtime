@@ -285,7 +285,6 @@ namespace Plugin {
         Core::Sink<Notification> _notification;
         Core::ProxyPoolType<Web::JSONBodyType<WebKitBrowser::Data>> _jsonBodyDataFactory;
         string _persistentStoragePath;
-        mutable Core::CriticalSection _adminLock;
     };
 }
 }

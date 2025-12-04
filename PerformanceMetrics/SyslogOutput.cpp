@@ -461,8 +461,6 @@ private:
         output.LoadAvarage = std::to_string(urloadedmetrics.AverageLoad()[0] / LA_SCALE).substr(0,4) + " " +
                              std::to_string(urloadedmetrics.AverageLoad()[1] / LA_SCALE).substr(0,4) + " " +
                              std::to_string(urloadedmetrics.AverageLoad()[2] / LA_SCALE).substr(0,4);
-        output.LoadAvarage = load0.substr(0, 4) + " " + load1.substr(0, 4) + " " + load2.substr(0, 4);
-
         static const long NPROC_ONLN = sysconf(_SC_NPROCESSORS_ONLN);
         output.NbrProcessors = NPROC_ONLN;
 

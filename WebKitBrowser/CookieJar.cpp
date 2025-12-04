@@ -93,7 +93,7 @@ static std::vector<uint8_t> compress(const std::string& str)
     // FIX(Manual Analysis 26): MEMORY - Validate compression buffer size
     if (len > 10485760) { // 10MB sanity limit
         TRACE_GLOBAL(Trace::Error,(_T("Compression buffer too large: %lu"), len));
-        result.resize(4, '\0');
+        result.resize(0);
         return result;
     }
     int status;
