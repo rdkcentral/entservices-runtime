@@ -358,10 +358,8 @@ public:
             size_t endIdx = _URL.find("/",startIdx);
             if(endIdx == std::string::npos)
                 return _URL.substr(startIdx);
-            else if (endIdx > startIdx)
-                return _URL.substr(startIdx, endIdx - startIdx);
             else
-                return _URL;
+                return _URL.substr(startIdx, endIdx - startIdx);
         }
     }
 
