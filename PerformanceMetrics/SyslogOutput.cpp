@@ -369,10 +369,11 @@ public:
     {
         if( URL != startURL ) {
             // FIX(Manual Analysis 13): LOGIC - Validate addition for integer overflow
-            uint32_t totalloaded = totalsuccess + totalfailed;
-            if( totalloaded < totalsuccess || totalloaded < totalfailed ) {
-                return; // Overflow detected
+            if( totalsuccess > UINT32_MAX - totalfailed ) {
+                TRACE(Trace::Error, (_T("Integer overflow detected: totalsuccess=%u, totalfailed=%u"), totalsuccess, totalfailed));
+                return; // Overflow would occur
             }
+             uint32_t totalloaded = totalsuccess + totalfailed;
             _adminLock.Lock();
             URLLoadedMetrics metrics(_urloadmetrics);
             _adminLock.Unlock();
