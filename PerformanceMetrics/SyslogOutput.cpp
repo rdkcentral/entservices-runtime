@@ -28,7 +28,7 @@
 #include "UtilsTelemetry.h"
 
 #include <sys/sysinfo.h>
-#defince PID_MAX_LIMIT 32768
+#define PID_MAX_LIMIT 32768
 
 namespace WPEFramework {
 namespace Plugin {
