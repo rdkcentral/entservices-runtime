@@ -86,7 +86,6 @@ namespace Plugin {
                     }
 
                     if (stateControl->Configure(_service) != Core::ERROR_NONE) {
-                        // FIX(Manual Analysis 17): MEMORY - Complete cleanup on Configure failure
                         if (_memory != nullptr) {
                             _memory->Release();
                             _memory = nullptr;
@@ -147,7 +146,6 @@ namespace Plugin {
         _memory->Release();
         _application->Release();
         Exchange::JWebBrowser::Unregister(*this);
-        // FIX(Manual Analysis 20): MEMORY - Set pointers to nullptr after Release
         if (_browserScripting) {
             Exchange::JBrowserScripting::Unregister(*this);
             _browserScripting->Release();
@@ -173,8 +171,6 @@ namespace Plugin {
 
         // Stop processing of the browser:
         VARIABLE_IS_NOT_USED uint32_t result = _browser->Release();
-        // FIX(Manual Analysis 18): MEMORY - Log Release result before ASSERT
-        // uint32_t result = _browser->Release();
 
         // It should have been the last reference we are releasing,
         // so it should end up in a DESCRUCTION_SUCCEEDED, if not we
@@ -183,7 +179,6 @@ namespace Plugin {
 
         // If this was running in a (container) process...
         if (connection != nullptr) {
-            // FIX(Manual Analysis 24): CONCURRENCY - Add timeout and error handling for Terminate
             // Lets trigger a cleanup sequence for
             // out-of-process code. Which will guard
             // that unwilling processes, get shot if

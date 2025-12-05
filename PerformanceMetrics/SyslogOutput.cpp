@@ -366,7 +366,6 @@ public:
     void LoadFinished(const string& URL, const int32_t, const bool success, const uint32_t totalsuccess, const uint32_t totalfailed) override 
     {
         if( URL != startURL ) {
-            // FIX(Manual Analysis 13): LOGIC - Validate addition for integer overflow
             if( totalsuccess > UINT32_MAX - totalfailed ) {
                 TRACE(Trace::Error, (_T("Integer overflow detected: totalsuccess=%u, totalfailed=%u"), totalsuccess, totalfailed));
                 return; // Overflow would occur
@@ -404,7 +403,6 @@ public:
             if( _processmemory != nullptr ) {
                 resident = _processmemory->Resident();
                 uint32_t pid = _processmemory->Identifier();
-                // FIX(Manual Analysis 11): SECURITY - Validate PID to prevent path traversal
                 if( pid != 0 && pid < PID_MAX_LIMIT ) {
                     metrics.StatmLine(GetProcessStatmLine(pid));
                 }

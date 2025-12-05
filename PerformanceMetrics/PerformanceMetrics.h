@@ -188,7 +188,6 @@ namespace Plugin {
             {
                 if( service.Callsign() == _callsign ) {
                     ASSERT(_observable.IsValid() == false);
-                    // FIX(Manual Analysis 1): MEMORY - Exception handling to prevent resource leak
                     try {
                         CreateObservable(service);
                         if( _observable.IsValid() == true ) {
@@ -278,7 +277,6 @@ namespace Plugin {
                     auto result =_observers.emplace(std::piecewise_construct,
                                        std::forward_as_tuple(service.Callsign()),
                                        std::forward_as_tuple(service.Callsign()));
-                    // FIX(Manual Analysis 4): CONCURRENCY - Handle race condition with proper locking
                     ASSERT( ( result.second == true ) && ( result.first != _observers.end() ) );
                     if( result.first != _observers.end() && result.second == true ) {
                         // New insertion successful - initialize and activate under lock

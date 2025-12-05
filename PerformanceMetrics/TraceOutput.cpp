@@ -170,7 +170,7 @@ public:
     void Resumed() override
     {
     }
-    
+
     void Suspended() override
     {
         uint64_t rss = 0;

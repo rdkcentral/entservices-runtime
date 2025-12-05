@@ -58,7 +58,6 @@ namespace Plugin {
         }
 
         if( result.empty() == true ) {
-            // FIX(Manual Analysis 7): LOGIC - Explicit null check before calling _handler methods
             ASSERT(_handler);
             if( _handler ) {
                 _handler->Initialize();
