@@ -195,14 +195,12 @@ namespace Plugin {
                         }
                     } catch (const std::exception& e) {
                         TRACE(Trace::Error, (_T("Exception during Activated: %s"), e.what()));
-                        // Cleanup on exception
                         if( _observable.IsValid() == true ) {
                             _observable->Disable();
                             _observable.Release();
                         }
                     } catch (...) {
                         TRACE(Trace::Error, (_T("Unknown exception during Activated for callsign: %s"), _callsign.c_str()));
-                        // Cleanup on exception
                         if( _observable.IsValid() == true ) {
                             _observable->Disable();
                             _observable.Release();
@@ -279,14 +277,11 @@ namespace Plugin {
                                        std::forward_as_tuple(service.Callsign()));
                     ASSERT( ( result.second == true ) && ( result.first != _observers.end() ) );
                     if( result.first != _observers.end() && result.second == true ) {
-                        // New insertion successful - initialize and activate under lock
                         result.first->second.Initialize();
                         result.first->second.Activated(service);
                     } else {
-                        // Collision: callsign already exists - this should not happen in normal operation
                         TRACE(Trace::Error, (_T("Observer for callsign %s already exists, ignoring duplicate activation"), service.Callsign().c_str()));
                     }
-                    // Lock held throughout to prevent race condition between emplace check and method calls
                     _adminLock.Unlock();
                 }
             }
@@ -295,7 +290,6 @@ namespace Plugin {
                 if( service.ClassName() == Classname() ) {
                     _adminLock.Lock();
                     auto it =_observers.find(service.Callsign());
-                    // Validate iterator before use to ensure the observer exists and avoid dereferencing an invalid iterator.
                     if( it != _observers.end() ) {
                         it->second.Deactivated(service);
                         it->second.Deinitialize();

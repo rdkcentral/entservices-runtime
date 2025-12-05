@@ -368,7 +368,7 @@ public:
         if( URL != startURL ) {
             if( totalsuccess > UINT32_MAX - totalfailed ) {
                 TRACE(Trace::Error, (_T("Integer overflow detected: totalsuccess=%u, totalfailed=%u"), totalsuccess, totalfailed));
-                return; // Overflow would occur
+                return;
             }
              uint32_t totalloaded = totalsuccess + totalfailed;
             _adminLock.Lock();
