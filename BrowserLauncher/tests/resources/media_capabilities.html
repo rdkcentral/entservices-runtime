@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+</head>
+<body>
+</body>
+<script>
+  let pendingMessages = [];
+  let id = 0;
+  let socket = null
+  const url = `ws://${location.host}/test_socket`
+
+  const createTestWebSocket = () => {
+      if (socket && socket.readyState < WebSocket.CLOSING)
+          socket.close()
+
+      console.log(`Connecting to ${url}`);
+      socket = new WebSocket(url);
+      socket.addEventListener('open', (event) => {
+          let messages = pendingMessages;
+          pendingMessages = [];
+          if (messages)
+              messages.forEach(message => sendMessageToServer(message));
+      });
+      socket.addEventListener('message', (event) => {
+          console.log('Message from server: ' + event.data);
+          try {
+              let msg = JSON.parse(event.data)
+              onTestMessage(msg);
+          } catch(e) {
+              sendMessageToServer({id: message.id, error: {code: e.code, message: e.message}})
+              console.error('Error:' + e.message)
+          }
+      });
+      socket.addEventListener('close', (event) => {
+          console.log('WebSocket connection closed, code:' + event.code + 'reason: '+ event.reason);
+      });
+      socket.addEventListener('error', (error) => {
+          console.error('WebSocket error:' + error);
+      });
+  }
+
+  const sendMessageToServer = (message) => {
+      if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify(message));
+      } else {
+          pendingMessages.push(message);
+      }
+      ++id;
+  }
+
+  const onTestMessage = (message) => {
+      let method = message.method
+      let req_id = message.id
+      if (method === 'MediaCapabilitiesTest.isHDROn')
+      {
+          let result = false;
+          result = window.matchMedia("(dynamic-range: high)").matches;
+          sendMessageToServer({id: req_id, result})
+      }
+      else if (method === 'MediaCapabilitiesTest.decodingInfo')
+      {
+          if (navigator.mediaCapabilities)
+          {
+              navigator.mediaCapabilities.decodingInfo(message.params)
+                  .then((result) => {
+                      sendMessageToServer({id: req_id, result})
+                  })
+                  .catch((error) => {
+                      sendMessageToServer({id: req_id, error: {message: error.message, code: error.code}})
+                  });
+          }
+          else
+          {
+              throw new Error("navigator.mediaCapabilities is not enabled");
+          }
+      }
+      else
+      {
+          throw new Error("Unhandled request: " + method);
+      }
+  }
+
+  createTestWebSocket()
+</script>
+</html>

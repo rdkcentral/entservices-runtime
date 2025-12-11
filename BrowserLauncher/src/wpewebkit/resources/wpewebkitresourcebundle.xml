@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <gresource prefix="/org/rdk/browser">
+    <file compressed="true" alias="error.html">error.html</file>
+  </gresource>
+</gresources>
+    
