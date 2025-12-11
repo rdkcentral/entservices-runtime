@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+</head>
+<body>
+</body>
+<script>
+  let pendingMessages = [];
+  let id = 0;
+  let state = 'initializing';
+  let socket = null
+  const url = `ws://${location.host}/test_socket`
+
+  const getState = () => {
+      if (document.visibilityState === 'hidden')
+          return 'hidden';
+      if (document.hasFocus())
+          return 'active';
+      return 'passive';
+  }
+
+  const createTestWebSocket = () => {
+      if (socket && socket.readyState < WebSocket.CLOSING)
+          socket.close()
+
+      console.log(`Connecting to ${url}`);
+      socket = new WebSocket(url);
+      socket.addEventListener('open', (event) => {
+          let messages = pendingMessages;
+          pendingMessages = [];
+          if (messages)
+              messages.forEach(message => sendMessageToServer(message));
+      });
+      socket.addEventListener('message', (event) => {
+          console.log('Message from server: ' + event.data);
+          let msg = JSON.parse(event.data)
+          if(msg.method === "Window.close") {
+              setTimeout(() => window.close(), 0);
+          }
+          else if(msg.method === "Window.minimize") {
+              setTimeout(() => window.minimize(), 0);
+          }
+      });
+      socket.addEventListener('close', (event) => {
+          console.log('WebSocket connection closed, code:' + event.code + 'reason: '+ event.reason);
+      });
+      socket.addEventListener('error', (error) => {
+          console.error('WebSocket error:' + error);
+      });
+  }
+
+  const sendMessageToServer = (message) => {
+      if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify(message));
+      } else {
+          pendingMessages.push(message);
+      }
+      ++id;
+  }
+
+  const onStateChange = (oldState, newState, eventType) => {
+      console.log(`state change: ${oldState} >>> ${newState}`);
+      if (oldState === 'frozen' && !socket) {
+          createTestWebSocket();
+      }
+      sendMessageToServer({id,method:"LifecycleTest.onStateChanged",params:{oldState,newState,eventType}});
+      if (newState === 'frozen') {
+          socket.close();
+          socket = null;
+      }
+  }
+
+  const onPageLifecycleEvent = (newState, eventType) => {
+      if (eventType !== undefined)
+          console.log(`event: ${eventType}, state: ${newState}`);
+      const oldState = state;
+      // 'visibilitychange' may get dispatched after 'pagehide' resulting in falsy transition to 'hidden'
+      if (oldState === 'terminated')
+          return
+      if (newState !== oldState) {
+          onStateChange(oldState, newState, eventType);
+          state = newState;
+      }
+  }
+
+  const opts = {capture: true};
+  ['pageshow', 'focus', 'blur', 'visibilitychange', 'resume'].forEach((type) => {
+      window.addEventListener(type, (event) => onPageLifecycleEvent(getState(), event.type), opts);
+  });
+  window.addEventListener('freeze', (event) => {
+      onPageLifecycleEvent('frozen', event.type);
+  }, opts);
+  window.addEventListener('pagehide', (event) => {
+      onPageLifecycleEvent(event.persisted ? 'frozen' : 'terminated', event.type);
+  }, opts);
+  window.addEventListener("beforeunload", (event) => {
+      console.log(`event: ${event.type}`)
+  }, opts);
+
+  // create connection to test server
+  createTestWebSocket();
+
+  // set initial state
+  onPageLifecycleEvent(getState());
+</script>
+</html>

@@ -1,0 +1,50 @@
+<html>
+
+<script>
+    window.onkeyup = function(event) {
+        if(event.keyCode === 27) // back key
+        {
+            window.close();
+        }
+    }
+</script>
+
+<style>
+    body {
+        color: white;
+        background-color: black;
+        font-family: sans-serif;
+    }
+
+    h1 {
+        font-size: 60px;
+    }
+
+    p {
+        font-size: 30px;
+    }
+
+    .container {
+        height: 100%;
+        position: relative;
+    }
+
+    .center {
+        margin: 0;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        -ms-transform: translate(-50%, -50%);
+        transform: translate(-50%, -50%);
+    }
+</style>
+
+<body>
+    <div class="container">
+        <div class="center">
+            <h1>Error Loading App</h1>
+            <p>Press back or dismiss button to exit</p>
+        </div>
+    </div>
+</body>
+</html>
