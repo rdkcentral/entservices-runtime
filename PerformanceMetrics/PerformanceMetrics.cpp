@@ -59,8 +59,10 @@ namespace Plugin {
 
         if( result.empty() == true ) {
             ASSERT(_handler);
-            _handler->Initialize();
-            service->Register(&_notification);
+            if( _handler ) {
+                _handler->Initialize();
+                service->Register(&_notification);
+            }
         } else {
             Deinitialize(service);
         }

@@ -149,11 +149,13 @@ namespace Plugin {
         if (_browserScripting) {
             Exchange::JBrowserScripting::Unregister(*this);
             _browserScripting->Release();
+            _browserScripting = nullptr;
         }
         if (_cookieJar) {
             Exchange::JBrowserCookieJar::Unregister(*this);
             _cookieJar->Unregister(&_notification);
             _cookieJar->Release();
+            _cookieJar = nullptr;
         }
         UnregisterAll();
 
@@ -391,7 +393,6 @@ namespace WebKitBrowser {
         uint64_t Resident() const override
         {
             uint32_t result(0);
-
             if (_startTime != TimePoint::min()) {
                 if (_children.Count() < RequiredChildren) {
                     _children = Core::ProcessInfo::Iterator(_main.Id());

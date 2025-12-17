@@ -188,9 +188,24 @@ namespace Plugin {
             {
                 if( service.Callsign() == _callsign ) {
                     ASSERT(_observable.IsValid() == false);
-
-                    CreateObservable(service);
-                    _observable->Activated(service);
+                    try {
+                        CreateObservable(service);
+                        if( _observable.IsValid() == true ) {
+                            _observable->Activated(service);
+                        }
+                    } catch (const std::exception& e) {
+                        TRACE(Trace::Error, (_T("Exception during Activated: %s"), e.what()));
+                        if( _observable.IsValid() == true ) {
+                            _observable->Disable();
+                            _observable.Release();
+                        }
+                    } catch (...) {
+                        TRACE(Trace::Error, (_T("Unknown exception during Activated for callsign: %s"), _callsign.c_str()));
+                        if( _observable.IsValid() == true ) {
+                            _observable->Disable();
+                            _observable.Release();
+                        }
+                    }
                 }
             }
             
@@ -261,8 +276,12 @@ namespace Plugin {
                                        std::forward_as_tuple(service.Callsign()),
                                        std::forward_as_tuple(service.Callsign()));
                     ASSERT( ( result.second == true ) && ( result.first != _observers.end() ) );
-                    result.first->second.Initialize();
-                    result.first->second.Activated(service);
+                    if( result.first != _observers.end() && result.second == true ) {
+                        result.first->second.Initialize();
+                        result.first->second.Activated(service);
+                    } else {
+                        TRACE(Trace::Error, (_T("Observer for callsign %s already exists, ignoring duplicate activation"), service.Callsign().c_str()));
+                    }
                     _adminLock.Unlock();
                 }
             }
