@@ -28,6 +28,7 @@
 #include "UtilsTelemetry.h"
 
 #include <sys/sysinfo.h>
+#define PID_MAX_LIMIT 4194304
 
 namespace WPEFramework {
 namespace Plugin {
@@ -351,6 +352,9 @@ public:
             return _URL;
         else {
             startIdx += 3; // skip "://"
+            if (startIdx >= _URL.length()) {
+                return _URL;
+            }
             size_t endIdx = _URL.find("/",startIdx);
             if(endIdx == std::string::npos)
                 return _URL.substr(startIdx);
@@ -362,6 +366,11 @@ public:
     void LoadFinished(const string& URL, const int32_t, const bool success, const uint32_t totalsuccess, const uint32_t totalfailed) override 
     {
         if( URL != startURL ) {
+            if( totalsuccess > UINT32_MAX - totalfailed ) {
+                TRACE(Trace::Error, (_T("Integer overflow detected: totalsuccess=%u, totalfailed=%u"), totalsuccess, totalfailed));
+                return;
+            }
+             uint32_t totalloaded = totalsuccess + totalfailed;
             _adminLock.Lock();
             URLLoadedMetrics metrics(_urloadmetrics);
             _adminLock.Unlock();
@@ -371,7 +380,7 @@ public:
             if(strcmp(getHostName(URL).c_str(), _lastLoggedApp.c_str()))
                 _didLogLaunchMetrics = false;
 
-            OutputLoadFinishedMetrics(metrics, getHostName(URL), urllaunchtime_ms, success, totalsuccess + totalfailed);
+            OutputLoadFinishedMetrics(metrics, getHostName(URL), urllaunchtime_ms, success, totalloaded);
 
             _timeIdleFirstStart = 0; // we only measure on first non about:blank url handling
         }
@@ -394,7 +403,7 @@ public:
             if( _processmemory != nullptr ) {
                 resident = _processmemory->Resident();
                 uint32_t pid = _processmemory->Identifier();
-                if( pid != 0 ) {
+                if( pid != 0 && pid < PID_MAX_LIMIT ) {
                     metrics.StatmLine(GetProcessStatmLine(pid));
                 }
             } else if ( _memory != nullptr ) {
@@ -495,7 +504,6 @@ private:
             std::getline(statmStream, statmLine);
             statmStream.close();
         }
-
         return  statmLine;
     }
 
