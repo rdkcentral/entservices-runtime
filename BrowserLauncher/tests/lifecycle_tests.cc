@@ -252,6 +252,71 @@ TEST_F(LifecycleStateTest, LaunchToActive)
     EXPECT_EQ(_page_state, "terminated");
 }
 
+TEST_F(LifecycleStateTest, ResumeToActive)
+{
+    // launch browser
+    launchBrowser(gchar_ptr(g_strdup_printf("http://127.0.0.1:%u/tests/page_lifecycle.html", kTestServerPort)).get());
+
+    // wait for launcher to establish "firebolt" connection
+    {
+        bool timed_out = !runUntil([this] {
+            return
+                _firebolt_connection != nullptr &&
+                _test_connection != nullptr &&
+                _state_change_listeners.size() > 0;
+        }, 5s);
+        EXPECT_FALSE(timed_out) << "timed out waiting for browser launcher";
+    }
+
+    EXPECT_NE(_firebolt_connection, nullptr);
+    EXPECT_EQ(_state_change_listeners.size(), 1);
+
+    // first move browser to frozen state
+    bool focused = false;
+    auto oldState = LifecycleState::INITIALIZING;
+    for (const auto newState : {LifecycleState::PAUSED, LifecycleState::SUSPENDED} )
+    {
+        const std::string pageState = toPageLifecycleState(newState, focused);
+
+        changeLifecycleStateState(oldState, newState, focused);
+
+        bool timed_out = !runUntil([this, pageState] {
+            return _test_connection != nullptr && _page_state == pageState;
+        }, 1s);
+        EXPECT_NE(_test_connection, nullptr);
+        EXPECT_EQ(_page_state, pageState);
+        EXPECT_FALSE(timed_out) << "timed out awaiting for initial page state change";
+
+        oldState = newState;
+    }
+
+    // next resume to active
+    {
+        focused = true;
+        const auto newState = LifecycleState::ACTIVE;
+        const std::string pageState = toPageLifecycleState(newState, focused);
+
+        changeLifecycleStateState(oldState, newState, focused);
+
+        bool timed_out = !runUntil([this, pageState] {
+            return _test_connection != nullptr && _page_state == pageState;
+        }, 1s);
+        EXPECT_NE(_test_connection, nullptr);
+        EXPECT_EQ(_page_state, pageState);
+        EXPECT_FALSE(timed_out) << "timed out awaiting for initial page state change";
+    }
+
+    // attempt to shutdown browser gracefully
+    changeLifecycleStateState(_current_lc_state, LifecycleState::TERMINATING);
+    {
+        runUntil([this] {
+            return _page_state == "terminated" && !_close_type.empty();
+        }, 500ms);
+    }
+    EXPECT_EQ(_close_type, "unload");
+    EXPECT_EQ(_page_state, "terminated");
+}
+
 TEST_F(LifecycleStateTest, WindowClose)
 {
     // launch browser
