@@ -3,7 +3,7 @@ description: Guidelines for C++ files and header files that share the same name 
 applyTo: "**/*.cpp,**/*.h"
 ---
 
-# Instructions summary
+# Instruction summary
   1. [Interface Implementation](https://github.com/rdkcentral/entservices-runtime/blob/develop/.github/instructions/Plugin.instructions.md#interface-implementation)
   2. [Service Registration](https://github.com/rdkcentral/entservices-runtime/blob/develop/.github/instructions/Plugin.instructions.md#service-registration)
   3. [JSON-RPC Stub Registration](https://github.com/rdkcentral/entservices-runtime/blob/develop/.github/instructions/Plugin.instructions.md#json-rpc-stub-registration)
@@ -113,7 +113,7 @@ RDKShell::RDKShell()
 
 ### Requirement
 
-- If the plugin runs as out-of-process, then it should implement RPC::IRemoteConnection::"INotification interface inside your plugin.
+- If the plugin runs as out-of-process, then it should implement RPC::IRemoteConnection::INotification interface inside your plugin.
 
 ### Example
 

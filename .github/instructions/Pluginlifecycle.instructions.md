@@ -90,7 +90,7 @@ const string HdcpProfile::Initialize(PluginHost::IShell *service)
 }
 ```
 
-- If a plugin needs to keep the `IShell` pointer beyond the scope of `Initialize()` (for example, by storing it in a member variable to access other plugins via COM-RPC or JSON-RPC throughout the plugin's lifecycle), then it **must** call `AddRef()` on the service instance before storing it, to increment its reference count. If the plugin only uses the `service` pointer within `Initialize()` and does not store it for later use, then `AddRef()` **must not** be called on the `IShell` instance.
+- If a plugin needs to keep the `IShell` pointer beyond the scope of `Initialize()` (for example, by storing it in a member variable to access other plugins via COM-RPC or JSON-RPC throughout the plugin's lifecycle), then the plugin **must** call `AddRef()` on the service instance before storing it, to increment its reference count. If the plugin only uses the `service` pointer within `Initialize()` and does not store it for later use, then `AddRef()` **must not** be called on the `IShell` instance.
 
 **Example:**
 
@@ -192,7 +192,7 @@ void HdcpProfile::Deinitialize(PluginHost::IShell* service) {
 
 ```cpp
 Core::hresult NativeJSImplementation::Deinitialize() {
-    LOGINFO("deinitializing NativeJS process");
+    LOGINFO("deinitializing NativeJS implementation");
     if (mNativeJSRenderer) {
         mNativeJSRenderer->terminate();
         if (mRenderThread.joinable()) {
@@ -222,7 +222,7 @@ void HdcpProfile::Deinitialize(PluginHost::IShell* service) {
 }
 ```
 
-- If AddRef() was called on the IShell instance in Initialize(), then it should call Release() on the IShell instance to decrement its reference count.
+- If AddRef() was called on the IShell instance in Initialize(), then Deinitialize() should call Release() on that IShell instance to decrement its reference count.
 
 **Example:**
 
@@ -252,7 +252,7 @@ void HdcpProfile::Deinitialize(PluginHost::IShell* service) {
 
 ### Deactivated
 
-Each plugin should implement the deactivated method. In Deactivated, it should be checked if remote connectionId matches your plugin's connectionId. If it matches your plugin's connectionId, the plugin should submit a deactivation job to handle the out-of-process failure gracefully.
+Each plugin should implement the Deactivated method. In Deactivated, it should check if the remote connectionId matches your plugin's connectionId. If it matches your plugin's connectionId, the plugin should submit a deactivation job to handle the out-of-process failure gracefully.
 
 ### Example
 

@@ -2,7 +2,7 @@
 applyTo: "**/**Implementation.cpp,**/**Implementation.h,**/**.cpp,**/**.h"
 ---
 
-# Instruction Summary
+# Instruction summary
   1. [Inter-Plugin Communication](https://github.com/rdkcentral/entservices-runtime/blob/develop/.github/instructions/Pluginimplementation.instructions.md#inter-plugin-communication)
   2. [On-Demand Plugin Interface Acquisition](https://github.com/rdkcentral/entservices-runtime/blob/develop/.github/instructions/Pluginimplementation.instructions.md#on-demand-plugin-interface-acquisition)
 
@@ -26,7 +26,7 @@ QueryInterface:
 _userSettingsPlugin = _service->QueryInterface<WPEFramework::Exchange::IUserSettings>();
 ```
 
-SHOULD not use JSON-RPC or LinkType for inter-plugin communication, as they introduce unnecessary overhead.
+Plugins SHOULD not use JSON-RPC or LinkType for inter-plugin communication, as they introduce unnecessary overhead.
 
 ### Incorrect Example
 
