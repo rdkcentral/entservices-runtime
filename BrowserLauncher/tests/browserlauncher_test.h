@@ -38,6 +38,8 @@ typedef struct _SoupWebsocketConnection SoupWebsocketConnection;
 typedef struct _SoupServerMessage SoupServerMessage;
 typedef struct _GSubprocessLauncher GSubprocessLauncher;
 typedef struct _GSubprocess GSubprocess;
+typedef struct _WstCompositor WstCompositor;
+typedef struct _EssCtx EssCtx;
 
 constexpr unsigned kTestServerPort = 8081;
 
@@ -69,6 +71,8 @@ private:
     void createServer(unsigned port);
     void stopBrowser();
     void breakIfNeeded();
+    void createCompositor();
+    void destroyCompositor();
 
     static void websocketHandler (
         SoupServer              *server,
@@ -88,13 +92,21 @@ protected:
     std::string _close_type { };
     bool _focused { false };
 
+    WstCompositor* _compositor { nullptr };
+    EssCtx *_ess_ctx { nullptr };
+    bool _did_receive_first_frame { false };
+    bool _did_receive_first_request { false };
+    int _frame_count { 0 };
+
     void SetUp() override {
         createMainLoop();
+        createCompositor();
         createServer(kTestServerPort);
     }
 
     void TearDown() override {
         stopBrowser();
+        destroyCompositor();
         stopMainLoopAndServer();
     }
 

@@ -21,6 +21,11 @@
 #include <gio/gio.h>
 #include <libsoup/soup.h>
 
+#if defined(HAVE_WESTEROS_COMPOSITOR)
+#include <westeros-compositor.h>
+#include <essos.h>
+#endif
+
 namespace {
 
 // Checks if given json `message` object looks like jsonrpc message
@@ -104,7 +109,10 @@ void BrowserLauncherTest::createServer(unsigned port)
     soup_server_add_websocket_handler (_server, "/fb_socket", nullptr, nullptr, BrowserLauncherTest::websocketHandler, this, nullptr);
     soup_server_add_websocket_handler (_server, "/test_socket", nullptr, nullptr, BrowserLauncherTest::websocketHandler, this, nullptr);
 
-    soup_server_add_handler(_server, "/tests", [](SoupServer*, SoupServerMessage* message, const char* path, GHashTable*, gpointer userData) {
+    soup_server_add_handler(_server, "/tests", [](SoupServer*, SoupServerMessage* message, const char* path, GHashTable*, gpointer user_data) {
+        auto *test = reinterpret_cast<BrowserLauncherTest*>(user_data);
+        test->_did_receive_first_request = true;
+
         GError *error = nullptr;
         gchar_ptr resourcePath { g_build_filename("/org/rdk", path, nullptr) };
         GBytes *bytes = g_resources_lookup_data(resourcePath.get(), G_RESOURCE_LOOKUP_FLAGS_NONE, &error);
@@ -151,6 +159,17 @@ void BrowserLauncherTest::launchBrowser(const std::string& url)
             gchar_ptr(g_strdup_printf("ws://127.0.0.1:%u/fb_socket", _server_port)).get(),
             true);
     }
+
+#if defined(HAVE_WESTEROS_COMPOSITOR)
+    if (_compositor)
+    {
+        const char *display_name = WstCompositorGetDisplayName(_compositor);
+        g_subprocess_launcher_setenv(
+            _launcher, "WAYLAND_DISPLAY", display_name, true);
+        // g_subprocess_launcher_setenv(
+        //     _launcher, "WAYLAND_DEBUG", "client", true);
+    }
+#endif
 
     std::vector<std::string> args;
     char **new_argv;
@@ -497,4 +516,141 @@ bool BrowserLauncherTest::runUntil(
     g_source_destroy(timeoutSource);
     g_source_unref(timeoutSource);
     return result;
+}
+
+void BrowserLauncherTest::createCompositor()
+{
+#if defined(HAVE_WESTEROS_COMPOSITOR)
+    if (_compositor)
+        return;
+
+    int window_width = 1920;
+    int window_height = 1080;
+
+    // Setup Essos
+    _ess_ctx = EssContextCreate();
+    if (!EssContextStart(_ess_ctx))
+    {
+        const char *detail = EssContextGetLastErrorDetail(_ess_ctx);
+        g_critical("Couldn't create essos context, err = %s", detail);
+        g_clear_pointer(&_ess_ctx, EssContextDestroy);
+        return;
+    }
+    EssContextGetDisplaySize(_ess_ctx, &window_width, &window_height);
+
+    // Create and setup compositor
+    _compositor = WstCompositorCreate();
+
+    WstCompositorSetIsEmbedded(_compositor, true);
+    WstCompositorSetOutputSize(_compositor, window_width, window_height);
+    WstCompositorSetClientStatusCallback(_compositor, +[](WstCompositor *wctx, int status, int client_pid, int detail, void *user_data) {
+        auto *self = reinterpret_cast<BrowserLauncherTest*>(user_data);
+        struct InvokeData {
+            BrowserLauncherTest* self;
+            int status;
+        };
+        g_message("Wst status: 0x%x, detail: %d, client pid: %d", status, detail, client_pid);
+        g_main_context_invoke_full(
+            self->_context,
+            G_PRIORITY_DEFAULT,
+            [](gpointer data) {
+                auto *invoke_data = reinterpret_cast<InvokeData*>(data);
+                switch (invoke_data->status) {
+                    case WstClient_disconnected:
+                    case WstClient_connected:
+                        invoke_data->self->_did_receive_first_frame = false;
+                        break;
+                    case WstClient_firstFrame:
+                        // EXPECT_TRUE(invoke_data->self->_did_receive_first_request);
+                        invoke_data->self->_did_receive_first_frame = true;
+                        break;
+                    default:
+                        break;
+                }
+                return G_SOURCE_REMOVE;
+            },
+            new InvokeData { self, status},
+            [](gpointer data) {
+                delete reinterpret_cast<InvokeData*>(data);
+            });
+    }, this);
+
+    // Setup draw callback
+    static GSourceFuncs s_sourceFunctions = {
+      .prepare = nullptr,
+      .check = nullptr,
+      .dispatch = [](GSource* source, GSourceFunc callback, gpointer user_data) -> gboolean
+      {
+          if (g_source_get_ready_time(source) == -1)
+              return G_SOURCE_CONTINUE;
+          g_source_set_ready_time(source, -1);
+          return callback(user_data);
+      },
+      .finalize = nullptr,
+      .closure_callback = nullptr,
+      .closure_marshal = nullptr,
+    };
+    GSource *draw_event_source = g_source_new(&s_sourceFunctions, sizeof(GSource));
+    g_source_set_callback(draw_event_source, +[](gpointer user_data) -> gboolean {
+        auto *self = reinterpret_cast<BrowserLauncherTest*>(user_data);
+        if (!self->_ess_ctx || !self->_compositor)
+            return G_SOURCE_REMOVE;
+        const float identity[16] = {
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f
+        };
+        int window_width = 1920;
+        int window_height = 1080;
+        bool needHolePunch = false;
+        std::vector<WstRect> rects;
+        unsigned int hints = WstHints_applyTransform | WstHints_noRotation | WstHints_holePunch;
+        EssContextGetDisplaySize(self->_ess_ctx, &window_width, &window_height);
+        WstCompositorComposeEmbedded(self->_compositor,
+                                     0, 0,
+                                     window_width, window_height,
+                                     const_cast<float*>(identity), 1.0,
+                                     hints, &needHolePunch, rects);
+        EssContextUpdateDisplay(self->_ess_ctx);
+        EssContextRunEventLoopOnce(self->_ess_ctx);
+        if (self->_did_receive_first_frame)
+        {
+            ++self->_frame_count;
+            g_message("draw_count: %d", self->_frame_count);
+        }
+        return G_SOURCE_CONTINUE;
+    }, this, nullptr);
+    g_source_set_priority(draw_event_source, G_PRIORITY_HIGH);
+    g_source_set_can_recurse(draw_event_source, TRUE);
+    g_source_set_ready_time(draw_event_source, -1);
+    g_source_attach(draw_event_source, _context);
+
+    WstCompositorSetInvalidateCallback(_compositor, [](WstCompositor *, void *user_data) {
+        auto *source = reinterpret_cast<GSource*>(user_data);
+        if (g_source_get_ready_time(source) == -1)
+            g_source_set_ready_time(source, g_get_monotonic_time() + 16666);
+    }, draw_event_source);
+
+    if (const char* parent_display = g_getenv("WAYLAND_DISPLAY"))
+    {
+        WstCompositorSetIsNested(_compositor, true);
+        WstCompositorSetNestedDisplayName(_compositor, parent_display);
+    }
+
+    if (!WstCompositorStart(_compositor))
+    {
+        g_critical("failed to start the compositor: %s", WstCompositorGetLastErrorDetail(_compositor));
+        destroyCompositor();
+        return;
+    }
+#endif
+}
+
+void BrowserLauncherTest::destroyCompositor()
+{
+#if defined(HAVE_WESTEROS_COMPOSITOR)
+    g_clear_pointer(&_compositor, WstCompositorDestroy);
+    g_clear_pointer(&_ess_ctx, EssContextDestroy);
+#endif
 }

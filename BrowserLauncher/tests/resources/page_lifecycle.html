@@ -1,8 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  <style>
+    body {
+        background-color: gray;
+    }
+  </style>
 </head>
 <body>
+  <div>
+    <h1>Page Lifecycle Test</h1>
+  </div>
 </body>
 <script>
   let pendingMessages = [];
@@ -42,10 +50,10 @@
           }
       });
       socket.addEventListener('close', (event) => {
-          console.log('WebSocket connection closed, code:' + event.code + 'reason: '+ event.reason);
+          console.log('WebSocket connection closed, code: ' + event.code + ', reason: '+ event.reason);
       });
       socket.addEventListener('error', (error) => {
-          console.error('WebSocket error:' + error);
+          console.error('WebSocket error: ' + error);
       });
   }
 
@@ -62,6 +70,9 @@
       console.log(`state change: ${oldState} >>> ${newState}`);
       if (oldState === 'frozen' && !socket) {
           createTestWebSocket();
+          requestAnimationFrame(() => {
+              console.log('Got first frame!');
+          });
       }
       sendMessageToServer({id,method:"LifecycleTest.onStateChanged",params:{oldState,newState,eventType}});
       if (newState === 'frozen') {
