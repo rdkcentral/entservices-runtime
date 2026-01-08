@@ -19,6 +19,7 @@ find_package( GLIB REQUIRED gio gio-unix gmodule gobject )
 find_package( GTest REQUIRED )
 find_package( nlohmann_json CONFIG REQUIRED )
 find_package( LibSoup "3.0" REQUIRED )
+find_package( WesterosCompositor )
 
 set( CMAKE_CXX_STANDARD 20 )
 set( CMAKE_CXX_STANDARD_REQUIRED ON )
@@ -52,6 +53,19 @@ target_link_libraries(
     GTest::gmock_main
     nlohmann_json::nlohmann_json
 )
+
+if (WesterosCompositor_FOUND)
+    find_package( Essos REQUIRED )
+    target_compile_definitions(
+      browser_launcher_tests PRIVATE
+        HAVE_WESTEROS_COMPOSITOR=1
+    )
+    target_link_libraries(
+      browser_launcher_tests
+        WesterosCompositor::WesterosCompositor
+        Essos::Essos
+    )
+endif()
 
 target_include_directories(
   browser_launcher_tests PRIVATE
