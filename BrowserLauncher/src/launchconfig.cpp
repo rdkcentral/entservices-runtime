@@ -37,9 +37,6 @@ namespace fs = std::filesystem;
 
 using json = nlohmann::json;
 
-#define DEFAULT_LOCAL_FILE_DIR "/package"
-#define DEFAULT_RUNTIME_DIR "/runtime"
-
 namespace
 {
     // internal
@@ -225,7 +222,7 @@ LaunchConfig::LaunchConfig(const std::string &configPath)
                 const auto& key = opt["key"].get<std::string>();
                 const auto& val = opt["value"].get<std::string>();
 
-#define HANDLE_RDK_CONFIG_OPTION(type_, name_, init_)               \
+#define HANDLE_RDK_CONFIG_OPTION(type_, name_, init_, help_)        \
                 if (key == #name_)                                  \
                 {                                                   \
                     m_##name_ = processOption<type_>(val);          \
@@ -305,8 +302,6 @@ LaunchConfig::LaunchConfig(const std::string &configPath)
         }
         return result;
     })();
-
-    printConfig();
 }
 
 int LaunchConfig::estimateLocalStorageQuota() const
@@ -341,11 +336,30 @@ int LaunchConfig::estimateLocalStorageQuota() const
 
 void LaunchConfig::printConfig() const
 {
-#define PRINT_OPTION(type_, name_, init_)             \
+#define PRINT_OPTION(type_, name_, init_, help_)    \
     printOption(#name_, name_());
 
     FOR_EACH_RDK_CONFIG_OPTION(PRINT_OPTION)
     FOR_EACH_ENV_OPTION(PRINT_OPTION)
 
 #undef PRINT_OPTION
+}
+
+void LaunchConfig::applyCmdLineOptions(std::map<std::string, std::string> options)
+{
+    for (const auto& [key, val] : options)
+    {
+#define HANDLE_RDK_CONFIG_OPTION(type_, name_, init_, help_)        \
+        if (key == #name_)                                          \
+        {                                                           \
+            m_##name_ = processOption<type_>(val);                  \
+        }                                                           \
+        else
+
+        FOR_EACH_RDK_CONFIG_OPTION(HANDLE_RDK_CONFIG_OPTION)
+        {
+            g_message("Unknown option: %s", key.c_str());
+        }
+#undef HANDLE_RDK_CONFIG_OPTION
+    }
 }

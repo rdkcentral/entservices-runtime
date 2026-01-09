@@ -39,7 +39,11 @@ set( CMAKE_INCLUDE_CURRENT_DIR ON )
 set(CMAKE_C_VISIBILITY_PRESET "hidden")
 set(CMAKE_CXX_VISIBILITY_PRESET "hidden")
 
-add_definitions( -DBROWSER_LAUNCHER_VERSION="${BROWSER_LAUNCHER_VERSION}" )
+add_definitions(
+        -DBROWSER_LAUNCHER_VERSION="${BROWSER_LAUNCHER_VERSION}"
+        -DDEFAULT_LOCAL_FILE_DIR="/package"
+        -DDEFAULT_RUNTIME_DIR="/runtime"
+        )
 
 add_subdirectory( wpewebkit )
 

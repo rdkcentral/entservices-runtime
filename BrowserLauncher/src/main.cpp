@@ -136,22 +136,62 @@ static BrowserInterface *createBrowserInstance(const std::string& runtimeDir)
     return factory();
 }
 
+static gboolean parseRDKConfigOption(
+    const char *option_name, const char *value,
+    gpointer data, GError **error)
+{
+    if (option_name[0] != '-' || option_name[1] != '-') {
+        g_set_error (error,
+                     G_OPTION_ERROR,
+                     G_OPTION_ERROR_FAILED,
+                     "Invalid option '%s'",
+                     option_name);
+        return FALSE;
+    }
+    option_name += 2; // skip '--'
+    auto& options = *reinterpret_cast<std::map<std::string, std::string>*>(data);
+    options[std::string(option_name)] = std::string(value ?: "");
+    return TRUE;
+}
+
+static GOptionGroup* createRDKConfigOptionGroup(
+    GOptionArgFunc callback, gpointer data)
+{
+    GOptionEntry entries[] = {
+#define DECLARE_OPTION_ENTRY(type_, name_, init_, help_)                \
+        { #name_, 0, 0, G_OPTION_ARG_CALLBACK, (gpointer)callback, help_, G_STRINGIFY(type_)},
+        FOR_EACH_RDK_CONFIG_OPTION(DECLARE_OPTION_ENTRY)
+#undef DECLARE_OPTION_ENTRY
+        { nullptr }
+    };
+    qsort(&entries[0], G_N_ELEMENTS(entries) - 1, sizeof(GOptionEntry), [](const void *p1, const void *p2) -> int {
+        GOptionEntry *e1 = (GOptionEntry *) p1;
+        GOptionEntry *e2 = (GOptionEntry *) p2;
+        return g_strcmp0 (e1->long_name, e2->long_name);
+    });
+    GOptionGroup* group = g_option_group_new("config", "RDK Config Options", "Show RDK config options", data, nullptr);
+    g_option_group_add_entries (group, entries);
+    return group;
+}
+
 int main(int argc, char *argv[])
 {
     GError *error = nullptr;
     gchar *url = nullptr;
     gchar *configPath = nullptr;
+    std::map<std::string, std::string> configOptions;
 
     // parse arguments
     {
         GOptionContext *context;
         GOptionEntry entries[] = {
-            { "url", 'u', 0, G_OPTION_ARG_STRING, &url, "Package uri", "file:///package/index.html" },
-            { "config", 'c', 0, G_OPTION_ARG_STRING, &configPath, "Config path", "/package/rdk.config" },
+            { "url", 'u', 0, G_OPTION_ARG_STRING, &url, "Package uri", "file://" DEFAULT_LOCAL_FILE_DIR "/index.html" },
+            { "config", 'c', 0, G_OPTION_ARG_STRING, &configPath, "Config path", DEFAULT_LOCAL_FILE_DIR "/rdk.config" },
             { nullptr }
         };
-        context = g_option_context_new ("- BrowserLauncher");
+        context = g_option_context_new (nullptr);
         g_option_context_add_main_entries (context, entries, nullptr);
+        g_option_context_add_group (context, createRDKConfigOptionGroup (&parseRDKConfigOption, &configOptions));
         if (!g_option_context_parse (context, &argc, &argv, &error))
         {
             g_printerr ("Option parsing failed: %s\n", error->message);
@@ -159,7 +199,7 @@ int main(int argc, char *argv[])
         }
         g_option_context_free (context);
         if (!url)
-            url = g_strdup("file:///package/index.html");
+            url = g_strdup("file://" DEFAULT_LOCAL_FILE_DIR "/index.html");
     }
 
     g_message("starting BrowserLauncher v" BROWSER_LAUNCHER_VERSION ", package url %s", url);
@@ -187,6 +227,8 @@ int main(int argc, char *argv[])
     // process the launch config (rdk.config and environment variables), we do
     // this early primarily so can determine if headless mode or not
     auto launchconfig = LaunchConfig::create(configPath ?: "");
+    launchconfig->applyCmdLineOptions(std::move(configOptions));
+    launchconfig->printConfig();
 
     // preload dependencies
     preLoadWPE(launchconfig->runtimeDir());

@@ -27,7 +27,7 @@
 #include <algorithm>
 #include <memory>
 
-constexpr const char* kEntryPageUrl = "file:///package/index.html";
+constexpr const char* kEntryPageUrl = "file://" DEFAULT_LOCAL_FILE_DIR "/index.html";
 
 using HeaderList = std::vector<std::pair<std::string, std::string>>;
 

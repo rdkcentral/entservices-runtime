@@ -23,7 +23,13 @@
 #include "launchconfiginterface.h"
 #include "launchconfigoptions.h"
 
-#define DEFAULT_CONFIG_FILE_PATH  "/package/rdk.config"
+#ifndef DEFAULT_RUNTIME_DIR
+#define DEFAULT_RUNTIME_DIR "/runtime"
+#endif
+#ifndef DEFAULT_LOCAL_FILE_DIR
+#define DEFAULT_LOCAL_FILE_DIR "/package"
+#endif
+#define DEFAULT_CONFIG_FILE_PATH  DEFAULT_LOCAL_FILE_DIR "/rdk.config"
 
 class LaunchConfig final : public LaunchConfigInterface
 {
@@ -33,23 +39,25 @@ private:
 
     explicit LaunchConfig(const std::string& configPath);
 public:
-    static std::shared_ptr<LaunchConfigInterface> create(const std::string& configPath = DEFAULT_CONFIG_FILE_PATH)
+    static std::shared_ptr<LaunchConfig> create(const std::string& configPath = DEFAULT_CONFIG_FILE_PATH)
     {
-        return std::shared_ptr<LaunchConfigInterface>(new LaunchConfig{configPath});
+        return std::shared_ptr<LaunchConfig>(new LaunchConfig{configPath});
     }
 
-#define DECLARE_OPTION_ACCESSORS(type_, name_, init_)   \
+#define DECLARE_OPTION_ACCESSORS(type_, name_, init_, help_)  \
     type_ name_ () const override { return m_##name_; }
 
     FOR_EACH_RDK_CONFIG_OPTION(DECLARE_OPTION_ACCESSORS)
     FOR_EACH_ENV_OPTION(DECLARE_OPTION_ACCESSORS)
 #undef DECLARE_OPTION_ACCESSORS
 
-private:
-    int estimateLocalStorageQuota() const;
+    void applyCmdLineOptions(std::map<std::string, std::string>);
     void printConfig() const;
 
-#define DEFINE_OPTIONS(type_, name_, init_)     \
+private:
+    int estimateLocalStorageQuota() const;
+
+#define DEFINE_OPTIONS(type_, name_, init_, help_)     \
     type_ m_##name_ init_;
 
     FOR_EACH_RDK_CONFIG_OPTION(DEFINE_OPTIONS)
