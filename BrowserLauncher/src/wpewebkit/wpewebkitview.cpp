@@ -889,7 +889,7 @@ bool WpeWebKitView::createView()
     {
         // Ensure package index.html will have access to local resources if file URLs cross
         // access is disabled
-        const gchar *list[] = { "file:///package/index.html", nullptr };
+        const gchar *list[] = { "file://" DEFAULT_LOCAL_FILE_DIR "/index.html", nullptr };
         webkit_web_view_set_local_universal_access_allowlist(m_view, list);
     }
 
