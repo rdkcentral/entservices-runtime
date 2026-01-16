@@ -94,8 +94,8 @@ protected:
 
     WstCompositor* _compositor { nullptr };
     EssCtx *_ess_ctx { nullptr };
-    bool _did_receive_first_frame { false };
-    bool _did_receive_first_request { false };
+    gint64 _first_frame_ts { -1 };
+    gint64 _first_request_ts { -1 };
     int _frame_count { 0 };
 
     void SetUp() override {
