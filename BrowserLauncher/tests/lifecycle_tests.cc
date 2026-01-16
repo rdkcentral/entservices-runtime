@@ -348,11 +348,12 @@ TEST_F(LifecycleStateTest, FirstFrameOnLoad)
         const std::string pageState = toPageLifecycleState(newState, focused);
         changeLifecycleStateState(oldState, newState, focused);
         bool timed_out = !runUntil([this, pageState] {
-            return _test_connection != nullptr && _page_state == pageState && _did_receive_first_frame;
+            return _test_connection != nullptr && _page_state == pageState && _first_frame_ts != -1;
         }, 3s);
         EXPECT_NE(_test_connection, nullptr);
         EXPECT_EQ(_page_state, pageState);
-        EXPECT_TRUE(_did_receive_first_frame);
+        EXPECT_NE(_first_frame_ts, -1);
+        EXPECT_GE(_first_frame_ts, _first_request_ts);
         EXPECT_FALSE(timed_out) << "timed out awaiting for page state change";
 
         oldState = newState;
@@ -395,17 +396,17 @@ TEST_F(LifecycleStateTest, FirstFrameOnResume)
     bool focused = false;
     auto oldState = LifecycleState::INITIALIZING;
 
-    // expected least one frame rendered
+    // expected at least one frame rendered
     for (const auto newState : {LifecycleState::PAUSED, LifecycleState::ACTIVE} )
     {
         const std::string pageState = toPageLifecycleState(newState, focused);
         changeLifecycleStateState(oldState, newState, focused);
         bool timed_out = !runUntil([this, pageState] {
-            return _test_connection != nullptr && _page_state == pageState && _did_receive_first_frame;
+            return _test_connection != nullptr && _page_state == pageState && _first_frame_ts != -1;
         }, 3s);
         EXPECT_NE(_test_connection, nullptr);
         EXPECT_EQ(_page_state, pageState);
-        EXPECT_TRUE(_did_receive_first_frame);
+        EXPECT_NE(_first_frame_ts, -1);
         EXPECT_FALSE(timed_out) << "timed out awaiting for page state change";
 
         oldState = newState;
@@ -447,7 +448,7 @@ TEST_F(LifecycleStateTest, FirstFrameOnResume)
         EXPECT_NE(_test_connection, nullptr);
         EXPECT_EQ(_page_state, pageState);
         EXPECT_GT(_frame_count, prevFrameCount);
-        EXPECT_TRUE(_did_receive_first_frame);
+        EXPECT_NE(_first_frame_ts, -1);
         EXPECT_FALSE(timed_out) << "timed out awaiting for page state change";
 
         oldState = newState;
@@ -497,11 +498,11 @@ TEST_F(LifecycleStateTest, FirstFrameWhileHidden)
         const std::string pageState = toPageLifecycleState(newState, focused);
         changeLifecycleStateState(oldState, newState, focused);
         bool timed_out = !runUntil([this, pageState] {
-            return _test_connection != nullptr && _page_state == pageState && _did_receive_first_frame;
+            return _test_connection != nullptr && _page_state == pageState && _first_frame_ts != -1;
         }, 3s);
         EXPECT_NE(_test_connection, nullptr);
         EXPECT_EQ(_page_state, pageState);
-        EXPECT_TRUE(_did_receive_first_frame);
+        EXPECT_NE(_first_frame_ts, -1);
         EXPECT_FALSE(timed_out) << "timed out awaiting for page state change";
 
         oldState = newState;
@@ -547,7 +548,7 @@ TEST_F(LifecycleStateTest, FirstFrameWhileHidden)
         EXPECT_NE(_test_connection, nullptr);
         EXPECT_EQ(_page_state, pageState);
         EXPECT_GT(_frame_count, prevFrameCount);
-        EXPECT_TRUE(_did_receive_first_frame);
+        EXPECT_NE(_first_frame_ts, -1);
         EXPECT_FALSE(timed_out) << "timed out awaiting for page state change";
 
         oldState = newState;

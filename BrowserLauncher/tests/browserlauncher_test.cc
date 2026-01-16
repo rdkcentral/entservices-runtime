@@ -111,7 +111,8 @@ void BrowserLauncherTest::createServer(unsigned port)
 
     soup_server_add_handler(_server, "/tests", [](SoupServer*, SoupServerMessage* message, const char* path, GHashTable*, gpointer user_data) {
         auto *test = reinterpret_cast<BrowserLauncherTest*>(user_data);
-        test->_did_receive_first_request = true;
+        if (test->_first_request_ts == -1)
+            test->_first_request_ts = g_get_monotonic_time();
 
         GError *error = nullptr;
         gchar_ptr resourcePath { g_build_filename("/org/rdk", path, nullptr) };
@@ -558,11 +559,10 @@ void BrowserLauncherTest::createCompositor()
                 switch (invoke_data->status) {
                     case WstClient_disconnected:
                     case WstClient_connected:
-                        invoke_data->self->_did_receive_first_frame = false;
+                        invoke_data->self->_first_frame_ts = -1;
                         break;
                     case WstClient_firstFrame:
-                        // EXPECT_TRUE(invoke_data->self->_did_receive_first_request);
-                        invoke_data->self->_did_receive_first_frame = true;
+                        invoke_data->self->_first_frame_ts = g_get_monotonic_time();
                         break;
                     default:
                         break;
@@ -614,7 +614,7 @@ void BrowserLauncherTest::createCompositor()
                                      hints, &needHolePunch, rects);
         EssContextUpdateDisplay(self->_ess_ctx);
         EssContextRunEventLoopOnce(self->_ess_ctx);
-        if (self->_did_receive_first_frame)
+        if (self->_first_frame_ts != -1)
         {
             ++self->_frame_count;
             g_message("draw_count: %d", self->_frame_count);
