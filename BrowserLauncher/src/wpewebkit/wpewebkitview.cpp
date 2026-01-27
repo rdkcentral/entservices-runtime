@@ -422,17 +422,74 @@ public:
 
 class WpePageLifecycleV2 : public WpePageLifecycleDelegate
 {
-    bool m_asyncOpInProgress  { false };
-    std::deque<std::function<void()>> m_pendingOps;
-
-    void processPending()
+    struct AsyncStateChange
     {
-        while (m_asyncOpInProgress == false && !m_pendingOps.empty())
-        {
-            auto pendingOp = std::move(m_pendingOps.front());
-            m_pendingOps.pop_front();
-            pendingOp();
-        }
+        using CompletionHandler = std::function<void(gboolean)>;
+        virtual ~AsyncStateChange() = default;
+        virtual const char* name() const = 0;
+        virtual gboolean run(WebKitWebView* view, CompletionHandler&& handler) = 0;
+    };
+
+#define DEFINE_PAGESTATE_CHANGE(_Name, _name)                           \
+    struct Async##_Name : public AsyncStateChange                       \
+    {                                                                   \
+        const char* name() const override { return #_name; }            \
+                                                                        \
+        gboolean run(WebKitWebView* view, CompletionHandler&& handler) override { \
+            g_message("plc_v2: attempting to " #_name " the page");     \
+            return webkit_web_view_##_name##_plc(                       \
+                view,                                                   \
+                (GAsyncReadyCallback)(+[](WebKitWebView* view, GAsyncResult* result, CompletionHandler *handler) { \
+                    GError* error = nullptr;                            \
+                    gboolean ret = webkit_web_view_##_name##_plc_finish(view, result, &error); \
+                    if (error || !ret)                                  \
+                    {                                                   \
+                        g_critical("plc_v2: " #_name " failed, error: %s", error ? error->message : "unknown"); \
+                    }                                                   \
+                    else                                                \
+                    {                                                   \
+                        g_message("plc_v2: " #_name " succeeded.");     \
+                    }                                                   \
+                    (*handler)(ret);                                    \
+                    delete handler;                                     \
+                }),                                                     \
+                new CompletionHandler{ std::move(handler) });           \
+        }                                                               \
+    }                                                                   \
+
+    DEFINE_PAGESTATE_CHANGE(Show, show);
+    DEFINE_PAGESTATE_CHANGE(Hide, hide);
+    DEFINE_PAGESTATE_CHANGE(Blur, blur);
+    DEFINE_PAGESTATE_CHANGE(Focus, focus);
+    DEFINE_PAGESTATE_CHANGE(Freeze, freeze);
+    DEFINE_PAGESTATE_CHANGE(Resume, resume);
+#undef DEFINE_PAGESTATE_CHANGE
+
+    bool m_asyncOpInProgress  { false };
+    std::deque<std::unique_ptr<AsyncStateChange>> m_stateChangeQueue;
+    std::shared_ptr<char> m_token { std::make_shared<char> (42) };
+
+    void processOnePending()
+    {
+        if (m_asyncOpInProgress || m_stateChangeQueue.empty())
+            return;
+
+        m_asyncOpInProgress = true;
+        auto& stateChange = m_stateChangeQueue.front();
+        stateChange->run(m_view, [this, token=std::weak_ptr<char>(m_token)](gboolean ret) {
+            if (!token.lock())
+                return;
+            m_stateChangeQueue.pop_front();
+            m_asyncOpInProgress = false;
+            processOnePending();
+        });
+    }
+
+    void enqueueAsyncChange(std::unique_ptr<AsyncStateChange> &&change)
+    {
+        g_message("plc_v2: enqueuing async '%s' state change", change->name());
+        m_stateChangeQueue.emplace_back(std::move(change));
+        processOnePending();
     }
 
 public:
@@ -445,161 +502,32 @@ public:
 
     void show() override
     {
-        g_message("plc_v2: attempting to show the page");
-
-        if (m_asyncOpInProgress)
-        {
-            g_message("plc_v2: async resume/freeze is in progress. delaying show.");
-            m_pendingOps.emplace_back([this]() {
-                show();
-            });
-            return;
-        }
-
-        if (!webkit_web_view_show_plc(m_view))
-            g_warning("plc_v2: web view show failed");
-        else
-            g_message("plc_v2: web view show succeeded");
+        enqueueAsyncChange(std::make_unique<AsyncShow>());
     }
 
     void hide() override
     {
-        g_message("plc_v2: attempting to hide the page");
-
-        if (m_asyncOpInProgress)
-        {
-            g_message("plc_v2: async resume/freeze is in progress. delaying hide.");
-            m_pendingOps.emplace_back([this]() {
-                hide();
-            });
-            return;
-        }
-
-        if (!webkit_web_view_hide_plc(m_view))
-            g_warning("plc_v2: web view hide failed");
-        else
-            g_message("plc_v2: web view hide succeeded");
+        enqueueAsyncChange(std::make_unique<AsyncHide>());
     }
 
     void focus() override
     {
-        g_message("plc_v2: attempting to focus the page");
-
-        if (m_asyncOpInProgress)
-        {
-            g_message("plc_v2: async resume/freeze is in progress. delaying focus.");
-            m_pendingOps.emplace_back([this]() {
-                focus();
-            });
-            return;
-        }
-
-        if (!webkit_web_view_focus_plc(m_view))
-            g_warning("plc_v2: web view focus failed");
-        else
-            g_message("plc_v2: web view focus succeeded");
+        enqueueAsyncChange(std::make_unique<AsyncFocus>());
     }
 
     void blur() override
     {
-        g_message("plc_v2: attempting to blur the page");
-
-        if (m_asyncOpInProgress)
-        {
-            g_message("plc_v2: async resume/freeze is in progress. delaying blur.");
-            m_pendingOps.emplace_back([this]() {
-                blur();
-            });
-            return;
-        }
-
-        if (!webkit_web_view_blur_plc(m_view))
-            g_warning("plc_v2: web view blur failed");
-        else
-            g_message("plc_v2: web view blur succeeded");
+        enqueueAsyncChange(std::make_unique<AsyncBlur>());
     }
 
     void freeze() override
     {
-        g_message("plc_v2: attempting to freeze the page");
-
-        if (m_asyncOpInProgress)
-        {
-            g_message("plc_v2: async resume/freeze is in progress. delaying freeze.");
-            m_pendingOps.emplace_back([this]() {
-                freeze();
-            });
-            return;
-        }
-
-        if (m_currState == PageLifecycleState::ACTIVE ||
-            m_currState == PageLifecycleState::PASSIVE)
-        {
-            g_warning("plc_v2: attempted to freeze visible page");
-            if (m_currState == PageLifecycleState::ACTIVE)
-                blur();
-            hide();
-        }
-
-        gboolean ret = webkit_web_view_freeze_plc(
-            m_view,
-            (GAsyncReadyCallback)(+[](WebKitWebView* view,  GAsyncResult* result, WpePageLifecycleV2 *self) {
-                GError* error = nullptr;
-                gboolean ret = webkit_web_view_freeze_plc_finish(view, result, &error);
-                if (error || !ret)
-                {
-                    g_warning("plc_v2: freeze failed, error: %s", error ? error->message : "unknown");
-                }
-                else
-                {
-                    g_message("plc_v2: view is frozen");
-                }
-                self->m_asyncOpInProgress = false;
-                self->processPending();
-            }),
-            this);
-
-        if (!ret)
-            g_warning("plc_v2: web view freeze failed");
-        else
-            m_asyncOpInProgress = true;
+        enqueueAsyncChange(std::make_unique<AsyncFreeze>());
     }
 
     void resume() override
     {
-        g_message("plc_v2: attempting to resume page");
-
-        if (m_asyncOpInProgress)
-        {
-            g_message("plc_v2: async resume/freeze is in progress. delaying resume.");
-            m_pendingOps.emplace_back([this]() {
-                resume();
-            });
-            return;
-        }
-
-        gboolean ret = webkit_web_view_resume_plc(
-            m_view,
-            (GAsyncReadyCallback)(+[](WebKitWebView* view, GAsyncResult* result, WpePageLifecycleV2 *self) {
-                GError* error = nullptr;
-                gboolean ret = webkit_web_view_resume_plc_finish(view, result, &error);
-                if (error || !ret)
-                {
-                    g_warning("plc_v2: resume failed, error: %s", error ? error->message : "unknown");
-                }
-                else
-                {
-                    g_message("plc_v2: resumed");
-                }
-                self->m_asyncOpInProgress = false;
-                self->processPending();
-            }),
-            this);
-
-        if (!ret)
-            g_warning("plc_v2: web view resume failed");
-        else
-            m_asyncOpInProgress = true;
+        enqueueAsyncChange(std::make_unique<AsyncResume>());
     }
 };
 

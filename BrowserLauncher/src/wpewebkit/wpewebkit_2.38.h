@@ -93,19 +93,52 @@ void webkit_uri_scheme_request_finish_with_response(WebKitURISchemeRequest* requ
 
 /* Page Lifecyle API */
 gboolean
-webkit_web_view_hide_plc                             (WebKitWebView             *web_view)
+webkit_web_view_hide_plc                             (WebKitWebView             *web_view,
+                                                      GAsyncReadyCallback       callback,
+                                                      gpointer                  user_data)
     __attribute__((weak));
 
 gboolean
-webkit_web_view_show_plc                             (WebKitWebView             *web_view)
+webkit_web_view_hide_plc_finish                      (WebKitWebView             *web_view,
+                                                      GAsyncResult              *result,
+                                                      GError                    **error)
     __attribute__((weak));
 
 gboolean
-webkit_web_view_focus_plc                            (WebKitWebView             *web_view)
+webkit_web_view_show_plc                             (WebKitWebView             *web_view,
+                                                      GAsyncReadyCallback       callback,
+                                                      gpointer                  user_data)
     __attribute__((weak));
 
 gboolean
-webkit_web_view_blur_plc                             (WebKitWebView             *web_view)
+webkit_web_view_show_plc_finish                      (WebKitWebView             *web_view,
+                                                      GAsyncResult              *result,
+                                                      GError                    **error)
+    __attribute__((weak));
+
+gboolean
+webkit_web_view_focus_plc                            (WebKitWebView             *web_view,
+                                                      GAsyncReadyCallback       callback,
+                                                      gpointer                  user_data)
+    __attribute__((weak));
+
+
+gboolean
+webkit_web_view_focus_plc_finish                     (WebKitWebView             *web_view,
+                                                      GAsyncResult              *result,
+                                                      GError                    **error)
+    __attribute__((weak));
+
+gboolean
+webkit_web_view_blur_plc                             (WebKitWebView             *web_view,
+                                                      GAsyncReadyCallback       callback,
+                                                      gpointer                  user_data)
+    __attribute__((weak));
+
+gboolean
+webkit_web_view_blur_plc_finish                      (WebKitWebView             *web_view,
+                                                      GAsyncResult              *result,
+                                                      GError                    **error)
     __attribute__((weak));
 
 gboolean
