@@ -91,14 +91,13 @@ void BrowserController::onBrowserLaunched()
 
     g_message("Browser launched");
 
+    m_browser->navigateTo(m_packageUrl);
+
     if (m_launchConfig->fireboltEndpoint().empty())
     {
         m_browser->setState(PageLifecycleState::ACTIVE);
     }
-
-    m_browser->navigateTo(m_packageUrl);
 }
-
 
 void BrowserController::onFireboltConnected()
 {

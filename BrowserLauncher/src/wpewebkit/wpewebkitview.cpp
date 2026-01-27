@@ -164,6 +164,7 @@ public:
     virtual void focus()  = 0;
     virtual void blur()   = 0;
     virtual void tryClose() = 0;
+    virtual void whenIdle(std::function<void()> && callback) = 0;
 };
 
 void WpePageLifecycleDelegate::changeState(PageLifecycleState newState)
@@ -427,6 +428,11 @@ public:
         // make the call to try and close the page
         webkit_web_view_try_close(m_view);
     }
+
+    void whenIdle(std::function<void()> && callback) override
+    {
+        callback();
+    }
 };
 
 class WpePageLifecycleV2 : public WpePageLifecycleDelegate
@@ -479,6 +485,7 @@ class WpePageLifecycleV2 : public WpePageLifecycleDelegate
         const char* name() const override { return "try_close"; }
 
         gboolean run(WebKitWebView* view, CompletionHandler&&) override {
+            g_message("plc_v2: attempting to close the page");
             webkit_web_view_try_close(view);
             return FALSE;
         }
@@ -486,12 +493,25 @@ class WpePageLifecycleV2 : public WpePageLifecycleDelegate
 
     bool m_asyncStateChangeInProgress  { false };
     std::deque<std::unique_ptr<StateChangeTask>> m_stateChangeQueue;
+    std::deque<std::function<void()>> m_idleCallbacks;
     std::shared_ptr<char> m_token { std::make_shared<char> (42) };
 
     void processOnePending()
     {
-        if (m_asyncStateChangeInProgress || m_stateChangeQueue.empty())
+        if (m_asyncStateChangeInProgress)
             return;
+
+        if (m_stateChangeQueue.empty())
+        {
+            if (!m_idleCallbacks.empty())
+            {
+                auto callbacks = std::move(m_idleCallbacks);
+                m_idleCallbacks.clear();
+                for (auto &cb : callbacks)
+                    cb();
+            }
+            return;
+        }
 
         auto& stateChange = m_stateChangeQueue.front();
 
@@ -559,6 +579,11 @@ public:
         enqueueAsyncChange(std::make_unique<TryClose>());
     }
 
+    void whenIdle(std::function<void()> && callback) override
+    {
+        m_idleCallbacks.emplace_back(std::move(callback));
+        processOnePending();
+    }
 };
 
 WpeWebKitView::WpeWebKitView(const std::shared_ptr<const WpeWebKitConfig> &config,
@@ -685,7 +710,7 @@ WebKitWebsiteDataManager *WpeWebKitView::createDataManager() const
     }
 }
 
-bool WpeWebKitView::createView()
+bool WpeWebKitView::createView(std::function<void()> && viewReadyCallback)
 {
     const auto memLimits = m_config->getMemoryLimits();
 
@@ -875,6 +900,8 @@ bool WpeWebKitView::createView()
 
     setState(PageLifecycleState::HIDDEN);
 
+    // signal view is ready after transition to hidden is completed
+    m_pageLifecycle->whenIdle(std::move(viewReadyCallback));
     return true;
 }
 
