@@ -53,7 +53,7 @@ public:
                   WpeWebKitViewCallbacks &&callbacks);
     ~WpeWebKitView();
 
-    bool createView();
+    bool createView(std::function<void()> && viewReadyCallback);
     bool loadUrl(const std::string &url);
     bool setState(PageLifecycleState state);
     bool tryClose();

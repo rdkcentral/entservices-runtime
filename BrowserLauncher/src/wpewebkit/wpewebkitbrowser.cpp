@@ -96,8 +96,16 @@ bool WpeWebKitBrowser::launch(const std::shared_ptr<const LaunchConfigInterface>
     // create the WPE instance with the supplied config
     m_mainView = std::make_unique<WpeWebKitView>(config, std::move(viewCallbacks));
 
+    auto onViewReadyCallback = [this]() {
+        // notify browser launched on next cycle
+        m_runLoop->InvokeTask([this] {
+            g_message("signalling that the browser has launched");
+            onLaunched.emit();
+        }, 0);
+    };
+
     // launch it with the given config
-    if (!m_mainView->createView())
+    if (!m_mainView->createView(std::move(onViewReadyCallback)))
     {
         return false;
     }
@@ -108,12 +116,6 @@ bool WpeWebKitBrowser::launch(const std::shared_ptr<const LaunchConfigInterface>
     }), this, nullptr);
     g_source_attach(hangTimerSource, g_main_context_get_thread_default());
     g_source_unref(hangTimerSource);
-
-    // notify browser launched on next cycle
-    m_runLoop->InvokeTask([this] {
-        g_message("signalling that the browser has launched");
-        onLaunched.emit();
-    }, 0);
     return true;
 }
 
@@ -189,7 +191,7 @@ void WpeWebKitBrowser::close()
     uint32_t closeTimeout = 0;
     if (m_mainView->tryClose())
     {
-        g_message("sent message to try gracefully to close the page");
+        g_message("trying to gracefully close the page");
         closeTimeout = m_tryCloseTimeout;
     }
 
