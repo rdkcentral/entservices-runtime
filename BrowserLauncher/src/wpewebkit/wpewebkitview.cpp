@@ -163,6 +163,7 @@ public:
     virtual void resume() = 0;
     virtual void focus()  = 0;
     virtual void blur()   = 0;
+    virtual void tryClose() = 0;
 };
 
 void WpePageLifecycleDelegate::changeState(PageLifecycleState newState)
@@ -418,20 +419,28 @@ public:
         auto* backend = webkit_web_view_backend_get_wpe_backend(webkit_web_view_get_backend(m_view));
         wpe_view_backend_remove_activity_state(backend, wpe_view_activity_state_focused);
     }
+
+    void tryClose() override
+    {
+        g_message("attempting to close the view %p ", m_view);
+
+        // make the call to try and close the page
+        webkit_web_view_try_close(m_view);
+    }
 };
 
 class WpePageLifecycleV2 : public WpePageLifecycleDelegate
 {
-    struct AsyncStateChange
+    struct StateChangeTask
     {
         using CompletionHandler = std::function<void(gboolean)>;
-        virtual ~AsyncStateChange() = default;
+        virtual ~StateChangeTask() = default;
         virtual const char* name() const = 0;
         virtual gboolean run(WebKitWebView* view, CompletionHandler&& handler) = 0;
     };
 
 #define DEFINE_PAGESTATE_CHANGE(_Name, _name)                           \
-    struct Async##_Name : public AsyncStateChange                       \
+    struct Async##_Name : public StateChangeTask                        \
     {                                                                   \
         const char* name() const override { return #_name; }            \
                                                                         \
@@ -465,27 +474,42 @@ class WpePageLifecycleV2 : public WpePageLifecycleDelegate
     DEFINE_PAGESTATE_CHANGE(Resume, resume);
 #undef DEFINE_PAGESTATE_CHANGE
 
-    bool m_asyncOpInProgress  { false };
-    std::deque<std::unique_ptr<AsyncStateChange>> m_stateChangeQueue;
+    struct TryClose : public StateChangeTask
+    {
+        const char* name() const override { return "try_close"; }
+
+        gboolean run(WebKitWebView* view, CompletionHandler&&) override {
+            webkit_web_view_try_close(view);
+            return FALSE;
+        }
+    };
+
+    bool m_asyncStateChangeInProgress  { false };
+    std::deque<std::unique_ptr<StateChangeTask>> m_stateChangeQueue;
     std::shared_ptr<char> m_token { std::make_shared<char> (42) };
 
     void processOnePending()
     {
-        if (m_asyncOpInProgress || m_stateChangeQueue.empty())
+        if (m_asyncStateChangeInProgress || m_stateChangeQueue.empty())
             return;
 
-        m_asyncOpInProgress = true;
         auto& stateChange = m_stateChangeQueue.front();
-        stateChange->run(m_view, [this, token=std::weak_ptr<char>(m_token)](gboolean ret) {
+
+        m_asyncStateChangeInProgress = stateChange->run(m_view, [this, token=std::weak_ptr<char>(m_token)](gboolean ret) {
             if (!token.lock())
                 return;
             m_stateChangeQueue.pop_front();
-            m_asyncOpInProgress = false;
+            m_asyncStateChangeInProgress = false;
             processOnePending();
         });
+
+        if (!m_asyncStateChangeInProgress)
+        {
+            m_stateChangeQueue.pop_front();
+        }
     }
 
-    void enqueueAsyncChange(std::unique_ptr<AsyncStateChange> &&change)
+    void enqueueAsyncChange(std::unique_ptr<StateChangeTask> &&change)
     {
         g_message("plc_v2: enqueuing async '%s' state change", change->name());
         m_stateChangeQueue.emplace_back(std::move(change));
@@ -529,6 +553,12 @@ public:
     {
         enqueueAsyncChange(std::make_unique<AsyncResume>());
     }
+
+    void tryClose() override
+    {
+        enqueueAsyncChange(std::make_unique<TryClose>());
+    }
+
 };
 
 WpeWebKitView::WpeWebKitView(const std::shared_ptr<const WpeWebKitConfig> &config,
@@ -976,10 +1006,7 @@ bool WpeWebKitView::tryClose()
         return false;
     }
 
-    g_message("attempting to close the view %p ", m_view);
-
-    // make the call to try and close the page
-    webkit_web_view_try_close(m_view);
+    m_pageLifecycle->tryClose();
 
     return true;
 }
