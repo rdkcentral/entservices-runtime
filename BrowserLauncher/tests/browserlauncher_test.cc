@@ -143,7 +143,7 @@ void BrowserLauncherTest::createServer(unsigned port)
     }
 }
 
-void BrowserLauncherTest::launchBrowser(const std::string& url)
+void BrowserLauncherTest::launchBrowser(const std::string& url, std::vector<std::string> args)
 {
     EXPECT_EQ(_launcher, nullptr);
     EXPECT_EQ(_runtime_process, nullptr);
@@ -172,9 +172,9 @@ void BrowserLauncherTest::launchBrowser(const std::string& url)
     }
 #endif
 
-    std::vector<std::string> args;
     char **new_argv;
-    args = {"--url", url};
+    args.emplace_back("--url");
+    args.emplace_back(url);
     new_argv = g_newa(char *, args.size() + 2);
     if (!new_argv)
     {

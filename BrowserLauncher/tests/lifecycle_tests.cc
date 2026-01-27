@@ -57,6 +57,7 @@ static std::string toPageLifecycleState(LifecycleState fireboltState, bool focus
 }
 
 class LifecycleStateTest: public BrowserLauncherTest
+                        , public ::testing::WithParamInterface<bool>
 {
 protected:
     void onTestMessage(const json& message) override;
@@ -64,6 +65,12 @@ protected:
 
     void sendWindowClose();
     void sendWindowMinimize();
+
+    void loadTestPage() {
+        launchBrowser(
+            gchar_ptr(g_strdup_printf("http://127.0.0.1:%u/tests/page_lifecycle.html", kTestServerPort)).get(),
+            {"--enableNonCompositedWebGL", GetParam() ? "true" : "false"});
+    }
 
     std::string _page_state { "initializing" };
 };
@@ -126,10 +133,10 @@ void LifecycleStateTest::onConnectionClosed(SoupWebsocketConnection *connection)
 
 }  // namespace
 
-TEST_F(LifecycleStateTest, SunnyDay)
+TEST_P(LifecycleStateTest, SunnyDay)
 {
     // launch browser
-    launchBrowser(gchar_ptr(g_strdup_printf("http://127.0.0.1:%u/tests/page_lifecycle.html", kTestServerPort)).get());
+    loadTestPage();
 
     // wait for launcher to establish "firebolt" connection
     {
@@ -206,10 +213,10 @@ TEST_F(LifecycleStateTest, SunnyDay)
     }
 }
 
-TEST_F(LifecycleStateTest, LaunchToActive)
+TEST_P(LifecycleStateTest, LaunchToActive)
 {
     // launch browser
-    launchBrowser(gchar_ptr(g_strdup_printf("http://127.0.0.1:%u/tests/page_lifecycle.html", kTestServerPort)).get());
+    loadTestPage();
 
     // wait for launcher to establish "firebolt" connection
     {
@@ -252,10 +259,10 @@ TEST_F(LifecycleStateTest, LaunchToActive)
     EXPECT_EQ(_page_state, "terminated");
 }
 
-TEST_F(LifecycleStateTest, ResumeToActive)
+TEST_P(LifecycleStateTest, ResumeToActive)
 {
     // launch browser
-    launchBrowser(gchar_ptr(g_strdup_printf("http://127.0.0.1:%u/tests/page_lifecycle.html", kTestServerPort)).get());
+    loadTestPage();
 
     // wait for launcher to establish "firebolt" connection
     {
@@ -317,7 +324,7 @@ TEST_F(LifecycleStateTest, ResumeToActive)
     EXPECT_EQ(_page_state, "terminated");
 }
 
-TEST_F(LifecycleStateTest, FirstFrameOnLoad)
+TEST_P(LifecycleStateTest, FirstFrameOnLoad)
 {
     // Verify browser draws a frame on page load
 #if !defined(HAVE_WESTEROS_COMPOSITOR)
@@ -325,7 +332,7 @@ TEST_F(LifecycleStateTest, FirstFrameOnLoad)
 #endif
 
     // launch browser
-    launchBrowser(gchar_ptr(g_strdup_printf("http://127.0.0.1:%u/tests/page_lifecycle.html", kTestServerPort)).get());
+    loadTestPage();
 
     // wait for launcher to establish "firebolt" connection
     {
@@ -370,7 +377,7 @@ TEST_F(LifecycleStateTest, FirstFrameOnLoad)
     EXPECT_EQ(_page_state, "terminated");
 }
 
-TEST_F(LifecycleStateTest, FirstFrameOnResume)
+TEST_P(LifecycleStateTest, FirstFrameOnResume)
 {
     // Verify browser draws a frame on transition frozen -> hidden
 #if !defined(HAVE_WESTEROS_COMPOSITOR)
@@ -378,7 +385,7 @@ TEST_F(LifecycleStateTest, FirstFrameOnResume)
 #endif
 
     // launch browser
-    launchBrowser(gchar_ptr(g_strdup_printf("http://127.0.0.1:%u/tests/page_lifecycle.html", kTestServerPort)).get());
+    loadTestPage();
 
     // wait for launcher to establish "firebolt" connection
     {
@@ -465,16 +472,15 @@ TEST_F(LifecycleStateTest, FirstFrameOnResume)
     EXPECT_EQ(_page_state, "terminated");
 }
 
-TEST_F(LifecycleStateTest, FirstFrameWhileHidden)
+TEST_P(LifecycleStateTest, FirstFrameWhileHidden)
 {
     // Verify browser renders at least 1 frame in hidden state
-
 #if !defined(HAVE_WESTEROS_COMPOSITOR)
     GTEST_SKIP();
 #endif
 
     // launch browser
-    launchBrowser(gchar_ptr(g_strdup_printf("http://127.0.0.1:%u/tests/page_lifecycle.html", kTestServerPort)).get());
+    loadTestPage();
 
     // wait for launcher to establish "firebolt" connection
     {
@@ -565,10 +571,10 @@ TEST_F(LifecycleStateTest, FirstFrameWhileHidden)
     EXPECT_EQ(_page_state, "terminated");
 }
 
-TEST_F(LifecycleStateTest, WindowClose)
+TEST_P(LifecycleStateTest, WindowClose)
 {
     // launch browser
-    launchBrowser(gchar_ptr(g_strdup_printf("http://127.0.0.1:%u/tests/page_lifecycle.html", kTestServerPort)).get());
+    loadTestPage();
 
     // wait for launcher to establish "firebolt" connection
     {
@@ -609,10 +615,10 @@ TEST_F(LifecycleStateTest, WindowClose)
     EXPECT_EQ(_close_type, "unload");
 }
 
-TEST_F(LifecycleStateTest, WindowMinimize)
+TEST_P(LifecycleStateTest, WindowMinimize)
 {
     // launch browser
-    launchBrowser(gchar_ptr(g_strdup_printf("http://127.0.0.1:%u/tests/page_lifecycle.html", kTestServerPort)).get());
+    loadTestPage();
 
     // wait for launcher to establish "firebolt" connection
     {
@@ -652,3 +658,7 @@ TEST_F(LifecycleStateTest, WindowMinimize)
     }
     EXPECT_EQ(_close_type, "deactivate");
 }
+
+INSTANTIATE_TEST_SUITE_P(LifecycleStateTests,
+                         LifecycleStateTest,
+                         ::testing::Values(false, true));
