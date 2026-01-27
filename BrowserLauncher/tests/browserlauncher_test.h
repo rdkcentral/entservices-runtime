@@ -117,7 +117,7 @@ protected:
     void changeLifecycleStateState(LifecycleState oldState, LifecycleState newState, bool focused = false);
     void sendFireboltMessage(const json& message) { sendMessage(_firebolt_connection, message); }
     void sendTestMessage(const json& message) { sendMessage(_test_connection, message); }
-    void launchBrowser(const std::string& url);
+    void launchBrowser(const std::string& url, std::vector<std::string> args = { });
     bool runUntil(
         std::function<bool()> && pred,
         const std::chrono::milliseconds timeout,
