@@ -495,8 +495,28 @@ class WpePageLifecycleV2 : public WpePageLifecycleDelegate
     std::deque<std::unique_ptr<StateChangeTask>> m_stateChangeQueue;
     std::deque<std::function<void()>> m_idleCallbacks;
     std::shared_ptr<char> m_token { std::make_shared<char> (42) };
+    guint m_sourceId { 0 };
 
-    void processOnePending()
+    void scheduleNextItemProcessing()
+    {
+        if (m_sourceId)
+            return;  // already scheduled
+
+        if (m_stateChangeQueue.empty() && m_idleCallbacks.empty())
+            return;  // nothing to process
+
+        GSource *source = g_idle_source_new ();
+        g_source_set_callback (source, [](gpointer data) {
+            auto *self = reinterpret_cast<WpePageLifecycleV2*>(data);
+            self->m_sourceId = 0;
+            self->processNextItem();
+            return G_SOURCE_REMOVE;
+        }, this, nullptr);
+        m_sourceId = g_source_attach(source, g_main_context_get_thread_default());
+        g_source_unref (source);
+    }
+
+    void processNextItem()
     {
         if (m_asyncStateChangeInProgress)
             return;
@@ -520,12 +540,13 @@ class WpePageLifecycleV2 : public WpePageLifecycleDelegate
                 return;
             m_stateChangeQueue.pop_front();
             m_asyncStateChangeInProgress = false;
-            processOnePending();
+            scheduleNextItemProcessing();
         });
 
         if (!m_asyncStateChangeInProgress)
         {
             m_stateChangeQueue.pop_front();
+            scheduleNextItemProcessing();
         }
     }
 
@@ -533,7 +554,7 @@ class WpePageLifecycleV2 : public WpePageLifecycleDelegate
     {
         g_message("plc_v2: enqueuing async '%s' state change", change->name());
         m_stateChangeQueue.emplace_back(std::move(change));
-        processOnePending();
+        scheduleNextItemProcessing();
     }
 
 public:
@@ -542,7 +563,11 @@ public:
     {
     }
 
-    ~WpePageLifecycleV2() = default;
+    ~WpePageLifecycleV2()
+    {
+        if (m_sourceId)
+            g_source_remove(m_sourceId);
+    }
 
     void show() override
     {
@@ -582,7 +607,7 @@ public:
     void whenIdle(std::function<void()> && callback) override
     {
         m_idleCallbacks.emplace_back(std::move(callback));
-        processOnePending();
+        scheduleNextItemProcessing();
     }
 };
 
