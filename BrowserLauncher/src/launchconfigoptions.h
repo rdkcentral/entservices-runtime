@@ -36,7 +36,7 @@
     macro(std::vector<LocalFilePath>, userStyleSheets, {}, "User styles to inject into the browser.") \
     macro(int, maxUnresponsiveTimeMs, {60*1000}, "Browser watchdog timeout.") \
     macro(bool, isHeadless, {false}, "Enable 'headless' mode.")          \
-    macro(bool, enableGpuMemLimiting, {false}, "Enable GPU memory monitoring.") \
+    macro(bool, enableGpuMemLimiting, {true}, "Enable GPU memory monitoring.") \
     macro(std::string, customUserAgent, {}, "Override browser user agent.") \
     macro(std::string, customUserAgentBase, {}, "Override base of browser user agent.") \
     macro(LoadFailurePolicy, loadFailurePolicy, {LoadFailurePolicy::Terminate}, "Specify how to handle page load failure. Possible values: 'ignore', 'display', 'terminate'.") \
