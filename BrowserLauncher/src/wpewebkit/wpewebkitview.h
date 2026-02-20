@@ -117,9 +117,6 @@ private:
                                                 WebKitUserMessage *message,
                                                 void *userData);
 
-    gboolean onWebRuntimeLoadUrl(WebKitUserMessage *message);
-
-
     void onMemorySavingTimerTimeout();
 
 private:

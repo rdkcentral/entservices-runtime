@@ -48,7 +48,6 @@
     macro(bool, enableIndexedDB, {false}, "Enable IndexedDB support. ") \
     macro(int, indexedDBStorageQuotaRatio, {-1}, "") \
     macro(int, maxMemorySavingIterations, {3}, "") \
-    macro(bool, enableWebRuntimeLoad, {true}, "Enable WebRuntimeLoad builtin extension.") \
     macro(bool, enableLifecycle2, {true}, "Enable page lifecycle.")     \
 
 //

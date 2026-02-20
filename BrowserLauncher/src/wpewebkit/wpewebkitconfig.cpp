@@ -146,9 +146,6 @@ bool WpeWebKitConfig::initExtensionDir()
     if (m_launchConfig->enableConsoleLog())
         extensions.insert("libLogExtension.so");
 
-    if (m_launchConfig->enableWebRuntimeLoad())
-        extensions.insert("libWebRuntimeExtension.so");
-
     std::string extDirectory = m_launchConfig->runtimeDir() + "/wpewebkit/extensions";
 
     // symlink the extensions
@@ -896,20 +893,6 @@ GVariantRef WpeWebKitConfig::commonExtensionSettings() const
     return GVariantRef { g_variant_builder_end(&builder) };
 }
 
-/*!
-    Returns a map of strings to values as settings to be interpreted by
-    the web runtime load browser extension.
- */
-GVariantRef WpeWebKitConfig::webRuntimeExtensionSettings() const
-{
-    GVariantBuilder builder;
-    g_variant_builder_init(&builder, G_VARIANT_TYPE("a{sv}"));
-
-    bool enableWebRuntimeLoad = m_launchConfig->enableWebRuntimeLoad();
-    g_variant_builder_add(&builder, "{sv}", "enable", g_variant_new_boolean(enableWebRuntimeLoad));
-
-    return GVariantRef { g_variant_builder_end(&builder) };
-}
 
 /*!
     Returns an html page contents to display when an load-failure error occurs.

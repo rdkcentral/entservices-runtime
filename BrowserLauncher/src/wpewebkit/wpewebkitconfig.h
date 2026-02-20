@@ -51,7 +51,6 @@ public:
 
     std::string extensionsDirectory() const;
     GVariantRef commonExtensionSettings() const;
-    GVariantRef webRuntimeExtensionSettings() const;
 
     inline LoadFailurePolicy loadFailurePolicy() const
     {
@@ -117,11 +116,6 @@ public:
     inline uint maxMemorySavingIterations() const
     {
         return m_launchConfig->maxMemorySavingIterations();
-    }
-
-    inline bool enableWebRuntimeLoad() const
-    {
-        return m_launchConfig->enableWebRuntimeLoad();
     }
 
 private:

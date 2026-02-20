@@ -69,6 +69,5 @@ public:
     virtual bool enableIndexedDB() const = 0;
     virtual int indexedDBStorageQuotaRatio() const = 0;
     virtual int maxMemorySavingIterations() const = 0;
-    virtual bool enableWebRuntimeLoad() const = 0;
     virtual bool enableLifecycle2() const = 0;
 };

@@ -1206,13 +1206,11 @@ void WpeWebKitView::initWebExtensionsCallback(WebKitWebContext *context,
     // so is an amalgamation of settings for the console.log, etc, extensions
 
     auto common   = self->m_config->commonExtensionSettings();
-    auto webRuntime = self->m_config->webRuntimeExtensionSettings();
 
     GVariantBuilder builder;
     g_variant_builder_init(&builder, G_VARIANT_TYPE("a{sv}"));
 
     g_variant_builder_add(&builder, "{sv}", "common",   common.release());
-    g_variant_builder_add(&builder, "{sv}", "webruntime", webRuntime.release());
 
     // set the user data for (all) the extensions
     GVariant *data = g_variant_builder_end(&builder);
@@ -1459,9 +1457,10 @@ gboolean WpeWebKitView::userMessageReceivedCallback(WebKitWebView *webView,
 
     const char* name = webkit_user_message_get_name(message);
     g_message("user message name='%s'", name);
-    if (strcmp(name, "WebRuntime.LoadUrl") == 0)
+    if (strcmp(name, "Window.minimize") == 0)
     {
-        return self->onWebRuntimeLoadUrl(message);
+        self->m_callbacks.close(CloseReason::DEACTIVATE);
+        return TRUE;
     }
 #if defined(ENABLE_TESTING)
     else if (self->m_config->enableTesting() && g_str_has_prefix(name, Testing::Tags::TestRunnerPrefix))
@@ -1477,11 +1476,6 @@ gboolean WpeWebKitView::userMessageReceivedCallback(WebKitWebView *webView,
         return TRUE;
     }
 #endif
-    else if (strcmp(name, "Window.minimize") == 0)
-    {
-        self->m_callbacks.close(CloseReason::DEACTIVATE);
-        return TRUE;
-    }
     else
     {
         g_warning("received unknown user message '%s'", name);
@@ -1519,107 +1513,5 @@ gboolean WpeWebKitView::decidePolicyCallback(WebKitWebView* webView,
         }
     }
     webkit_policy_decision_use(decision);
-    return TRUE;
-}
-
-/*!
-    \internal
-
-    Called when a user-message is received from the WebRuntime extension, telling us
-    that an app has requested that we load a new URL with supplied optional
-    custom headers and options.
-
- */
-gboolean WpeWebKitView::onWebRuntimeLoadUrl(WebKitUserMessage *message)
-{
-    // get the url string and headers
-    GVariant *payload = webkit_user_message_get_parameters(message);
-    if (!payload)
-    {
-        g_warning("failed to get the user-message payload");
-        return FALSE;
-    }
-
-#if GLIB_CHECK_VERSION(2,72,0)
-    if (g_log_get_debug_enabled())
-    {
-        gchar *str = g_variant_print(payload, TRUE);
-        g_debug("received WebRuntime.LoadUrl request - %s", str);
-        g_free(str);
-    }
-#endif
-
-    // the variant is a tuple of variants, the first is a string for the url and
-    // the second is a map of custom options
-    // Custom headers are not part of the message. They are applied directly by the
-    // WebRuntime extension.
-    const char *url = nullptr;
-    GVariant *options = nullptr;
-    g_variant_get(payload, "(&s@a{sv})", &url, &options);
-    if (!url || !options)
-    {
-        g_warning("failed to get the request args from the payload");
-        return FALSE;
-    }
-
-    // create a new web request for the page navigation
-    WebKitURIRequest *request = webkit_uri_request_new(url);
-
-    // check the options to see if should be changing the user agent at the
-    // same time
-    const gchar* userAgent = nullptr;
-    if (g_variant_lookup(options, "userAgent", "&s", &userAgent))
-        g_info("userAgent = %s", userAgent);
-
-    // simple object to store the view and request object
-    struct LoadUrlRequest
-    {
-        WebKitWebView *view;
-        WebKitURIRequest *request;
-        std::string userAgent;
-    } *loadRequest = new LoadUrlRequest{ m_view, request, std::string(userAgent ? userAgent : "") };
-
-    g_variant_unref(options);
-
-    // make the call to set the url the next time through the event loop
-    GSource *source = g_idle_source_new();
-    g_source_set_callback(
-        source,
-        [](gpointer userData) -> gboolean {
-            auto *request = reinterpret_cast<LoadUrlRequest*>(userData);
-
-            // if we have a new user agent then set that before the request
-            if (!request->userAgent.empty())
-            {
-                WebKitSettings *settings = webkit_web_view_get_settings(request->view);
-                if (!settings)
-                {
-                    g_warning("failed to get the settings for current webview");
-                }
-                else
-                {
-                    g_message("changing the user agent to '%s'", request->userAgent.c_str());
-                    webkit_settings_set_user_agent(settings, request->userAgent.c_str());
-                }
-            }
-
-            g_message("attempting to navigate to '%s'",
-                  webkit_uri_request_get_uri(request->request));
-
-            // now make the load request
-            webkit_web_view_load_request(request->view, request->request);
-
-            return G_SOURCE_REMOVE;
-        },
-        loadRequest,
-        [](gpointer userData) -> void {
-            auto *request = reinterpret_cast<LoadUrlRequest*>(userData);
-            g_object_unref(request->request);
-            delete request;
-        });
-
-    g_source_attach(source, g_main_context_get_thread_default());
-    g_source_unref(source);
-
     return TRUE;
 }
