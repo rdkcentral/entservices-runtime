@@ -632,12 +632,6 @@ void BrowserLauncherTest::createCompositor()
             g_source_set_ready_time(source, g_get_monotonic_time() + 16666);
     }, draw_event_source);
 
-    if (const char* parent_display = g_getenv("WAYLAND_DISPLAY"))
-    {
-        WstCompositorSetIsNested(_compositor, true);
-        WstCompositorSetNestedDisplayName(_compositor, parent_display);
-    }
-
     if (!WstCompositorStart(_compositor))
     {
         g_critical("failed to start the compositor: %s", WstCompositorGetLastErrorDetail(_compositor));

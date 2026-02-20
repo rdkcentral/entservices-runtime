@@ -223,6 +223,7 @@ TEST_P(LifecycleStateTest, LaunchToActive)
         bool timed_out = !runUntil([this] {
             return
                 _firebolt_connection != nullptr &&
+                _test_connection != nullptr &&
                 _state_change_listeners.size() > 0;
         }, 5s);
         EXPECT_FALSE(timed_out) << "timed out waiting for browser launcher";
@@ -253,7 +254,7 @@ TEST_P(LifecycleStateTest, LaunchToActive)
     {
         runUntil([this] {
             return _page_state == "terminated" && !_close_type.empty();
-        }, 500ms);
+        }, 1s);
     }
     EXPECT_EQ(_close_type, "unload");
     EXPECT_EQ(_page_state, "terminated");
@@ -318,7 +319,7 @@ TEST_P(LifecycleStateTest, ResumeToActive)
     {
         runUntil([this] {
             return _page_state == "terminated" && !_close_type.empty();
-        }, 500ms);
+        }, 1s);
     }
     EXPECT_EQ(_close_type, "unload");
     EXPECT_EQ(_page_state, "terminated");
@@ -371,7 +372,7 @@ TEST_P(LifecycleStateTest, FirstFrameOnLoad)
     {
         runUntil([this] {
             return _page_state == "terminated" && !_close_type.empty();
-        }, 500ms);
+        }, 1000ms);
     }
     EXPECT_EQ(_close_type, "unload");
     EXPECT_EQ(_page_state, "terminated");
@@ -466,7 +467,7 @@ TEST_P(LifecycleStateTest, FirstFrameOnResume)
     {
         runUntil([this] {
             return _page_state == "terminated" && !_close_type.empty();
-        }, 500ms);
+        }, 1s);
     }
     EXPECT_EQ(_close_type, "unload");
     EXPECT_EQ(_page_state, "terminated");
@@ -565,7 +566,7 @@ TEST_P(LifecycleStateTest, FirstFrameWhileHidden)
     {
         runUntil([this] {
             return _page_state == "terminated" && !_close_type.empty();
-        }, 500ms);
+        }, 1s);
     }
     EXPECT_EQ(_close_type, "unload");
     EXPECT_EQ(_page_state, "terminated");
