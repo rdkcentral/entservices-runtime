@@ -51,7 +51,7 @@ private:
         wl_registry* registry = nullptr;
         wl_simple_shell* simpleshell = nullptr;
     } m_wl;
-    GSource *m_waylandSource;
+    GSource *m_waylandSource { nullptr };
     std::deque<uint32_t> m_surfaces;
 };
 

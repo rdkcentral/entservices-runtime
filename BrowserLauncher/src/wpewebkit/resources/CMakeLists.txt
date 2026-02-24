@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-find_package( GLIB REQUIRED gio )
+find_package( GLIB REQUIRED COMPONENTS gio )
 
 find_program(
         GLIB_COMPILE_RESOURCES_EXECUTABLE

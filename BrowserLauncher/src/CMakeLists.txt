@@ -24,7 +24,7 @@ add_compile_options( -Wall -Wno-psabi )
 
 find_package( nlohmann_json CONFIG REQUIRED )
 find_package( Threads REQUIRED )
-find_package( GLIB REQUIRED gio gio-unix gmodule gobject )
+find_package( GLIB REQUIRED COMPONENTS gio gio-unix gmodule gobject )
 find_package( FireboltClient CONFIG REQUIRED )
 find_package( FireboltTransport CONFIG REQUIRED )
 

@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-find_package( GLIB REQUIRED gio gio-unix gmodule gobject )
+find_package( GLIB REQUIRED COMPONENTS gio gio-unix gmodule gobject )
 find_package( GTest REQUIRED )
 find_package( nlohmann_json CONFIG REQUIRED )
 find_package( LibSoup "3.0" REQUIRED )
@@ -50,7 +50,6 @@ target_link_libraries(
     ${GLIB_LIBRARIES}
     ${LIBSOUP_LIBRARIES}
     GTest::gtest_main
-    GTest::gmock_main
     nlohmann_json::nlohmann_json
 )
 
@@ -75,6 +74,6 @@ target_include_directories(
 
 install(
   TARGETS browser_launcher_tests
-  DESTINATION ${CMAKE_INSTALL_PREFIX}/tests
+  DESTINATION tests
   COMPONENT Tests
 )

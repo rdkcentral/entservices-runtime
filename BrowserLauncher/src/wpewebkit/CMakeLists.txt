@@ -20,6 +20,9 @@ option( ENABLE_TESTRUNNER "Enable test runner framework (core and JS extensions)
 find_package( WPEBackend REQUIRED )
 find_package( WPEWebKit REQUIRED )
 
+add_subdirectory( resources )
+add_subdirectory( extensions )
+
 add_library( WpeWebKitBrowser
         SHARED
 
@@ -58,9 +61,6 @@ target_compile_options( WpeWebKitBrowser
 target_link_libraries( WpeWebKitBrowser
         PRIVATE
         )
-
-add_subdirectory( resources )
-add_subdirectory( extensions )
 
 if( ENABLE_TESTRUNNER )
     add_subdirectory( testing )

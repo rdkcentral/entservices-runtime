@@ -29,7 +29,7 @@ target_compile_definitions( LogExtension
 target_include_directories( LogExtension
         PRIVATE
         $<TARGET_PROPERTY:WPEBackend::WPEBackend,INTERFACE_INCLUDE_DIRECTORIES>
-        $<TARGET_PROPERTY:WPEWebKit::WPEWebKit${WEBKIT_API_VERSION},INTERFACE_INCLUDE_DIRECTORIES>
+        $<TARGET_PROPERTY:WPEWebKit::WPEWebKit,INTERFACE_INCLUDE_DIRECTORIES>
         )
 
 target_link_libraries( LogExtension

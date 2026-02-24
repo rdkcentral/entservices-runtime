@@ -21,6 +21,7 @@
 #include <unordered_map>
 #include <vector>
 #include <optional>
+#include <algorithm>
 
 namespace {
 
@@ -137,7 +138,7 @@ class DecodingInfoTest: public MediaCapabilitiesTest
 
 TEST_P(HdrSupportTest, InitialHdrSetting)
 {
-    // Temporarly skip the test until Display API finalized
+    // Temporarily skip the test until Display API finalized
     GTEST_SKIP();
 
     _is_hdr_on = GetParam();
@@ -186,7 +187,7 @@ TEST_P(HdrSupportTest, InitialHdrSetting)
 
 TEST_P(HdrSupportTest, HdrSettingChange)
 {
-    // Temporarly skip the test until Display API finalized
+    // Temporarily skip the test until Display API finalized
     GTEST_SKIP();
 
     _is_hdr_on = GetParam();

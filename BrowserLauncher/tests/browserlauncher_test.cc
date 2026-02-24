@@ -26,6 +26,8 @@
 #include <essos.h>
 #endif
 
+#include <algorithm>
+
 namespace {
 
 // Checks if given json `message` object looks like jsonrpc message

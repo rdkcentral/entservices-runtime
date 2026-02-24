@@ -24,7 +24,9 @@
 
 #include <chrono>
 #include <functional>
+#include <memory>
 #include <string>
+#include <vector>
 
 #include "nlohmann/json.hpp"
 

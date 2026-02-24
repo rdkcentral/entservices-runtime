@@ -56,7 +56,7 @@
 // configuration options set via envs or container environment
 //
 #define FOR_EACH_ENV_OPTION(macro)                                      \
-    macro(std::string, runtimeDir, {0}, "")                             \
+    macro(std::string, runtimeDir, {}, "")                              \
     macro(unsigned, totalDiskSpaceBytes, {0}, "")                       \
     macro(ProcessEnvironment, browserEnvs, {}, "")                      \
     macro(std::string, navigatorLanguage, {}, "")                       \

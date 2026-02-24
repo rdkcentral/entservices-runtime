@@ -26,7 +26,9 @@
 #include <gmodule.h>
 #include <dlfcn.h>
 #include <glob.h>
+
 #include <csignal>
+#include <array>
 
 struct GFreeDeleter
 {
