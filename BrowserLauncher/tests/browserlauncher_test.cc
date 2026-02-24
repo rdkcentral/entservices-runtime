@@ -132,7 +132,7 @@ void BrowserLauncherTest::createServer(unsigned port)
             const guchar *dataPtr = reinterpret_cast<const guchar *>(g_bytes_get_data(bytes, &dataSize));
             gchar_ptr fileName { g_path_get_basename(resourcePath.get()) };
             gchar_ptr contentType { g_content_type_guess(fileName.get(), dataPtr, dataSize, nullptr) };
-            soup_message_headers_append(soup_server_message_get_response_headers(message), "Content-Type", "text/html");
+            soup_message_headers_append(soup_server_message_get_response_headers(message), "Content-Type", contentType.get());
             soup_message_body_append(soup_server_message_get_response_body(message), SOUP_MEMORY_COPY, dataPtr, dataSize);
             soup_server_message_set_status(message, SOUP_STATUS_OK, nullptr);
             g_bytes_unref(bytes);
