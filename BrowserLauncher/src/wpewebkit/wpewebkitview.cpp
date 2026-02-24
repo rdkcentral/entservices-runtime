@@ -30,6 +30,7 @@
 #include <deque>
 #include <cmath>
 #include <cinttypes>
+#include <optional>
 
 namespace {
 
@@ -126,6 +127,34 @@ PageLifecycleState nextState(PageLifecycleState current, PageLifecycleState targ
             break;
     };
     return target;
+}
+
+std::optional<guint> getMemoryPressureMonitorModeByName(const char name[], std::string& nick)
+{
+    std::optional<guint> result;
+
+    GObjectClass* wkContextClass = G_OBJECT_CLASS(g_type_class_ref(WEBKIT_TYPE_WEB_CONTEXT));
+    if (g_object_class_find_property(wkContextClass, "memory-pressure-monitor-mode") != nullptr)
+    {
+        GEnumClass* wkMemoryPressureMonitorModeClass =
+            G_ENUM_CLASS(g_type_class_ref(g_type_from_name("WebKitMemoryPressureMonitorMode")));
+        GEnumValue* value =
+            g_enum_get_value_by_name(wkMemoryPressureMonitorModeClass, name);
+        if (value)
+        {
+            result = value->value;
+            nick = value->value_nick;
+        }
+        g_type_class_unref(wkMemoryPressureMonitorModeClass);
+    }
+    g_type_class_unref(wkContextClass);
+
+    if (nick.empty())
+    {
+        nick = "unknown";
+    }
+
+    return result;
 }
 
 }
@@ -769,6 +798,14 @@ bool WpeWebKitView::createView(std::function<void()> && viewReadyCallback)
         unsigned long webProcessLimitMB = memLimits.webProcessLimitMB;
         if (webProcessLimitMB != 0)
         {
+            std::optional<guint> memoryPressureMonitorMode;
+            if (m_config->memoryMonitorUseContainerMode())
+            {
+                std::string nickName;
+                memoryPressureMonitorMode = getMemoryPressureMonitorModeByName("WEBKIT_MEMORY_PRESSURE_MONITOR_MODE_CONTAINER", nickName);
+                g_message("memory-pressure-monitor-mode: %u(%s)", memoryPressureMonitorMode.value_or(-1U), nickName.c_str());
+            }
+
             WebKitMemoryPressureSettings* memoryPressureSettings = webkit_memory_pressure_settings_new();
             webkit_memory_pressure_settings_set_memory_limit(memoryPressureSettings, webProcessLimitMB);
             webkit_memory_pressure_settings_set_poll_interval(memoryPressureSettings, memLimits.pollIntervalSec);
@@ -781,12 +818,31 @@ bool WpeWebKitView::createView(std::function<void()> && viewReadyCallback)
                 webkit_memory_pressure_settings_set_poll_interval(serviceWorkerMemoryPressureSettings, memLimits.pollIntervalSec);
 
                 // pass web process memory pressure settings to WebKitWebContext constructor
+                if (memoryPressureMonitorMode.has_value()) {
+                    wkContext = WEBKIT_WEB_CONTEXT(g_object_new(WEBKIT_TYPE_WEB_CONTEXT,
+                                                                "website-data-manager", wkDataManager,
+                                                                "memory-pressure-settings", memoryPressureSettings,
+                                                                "service-worker-memory-pressure-settings", serviceWorkerMemoryPressureSettings,
+                                                                "memory-pressure-monitor-mode", *memoryPressureMonitorMode,
+                                                                nullptr));
+                }
+                else
+                {
+                    wkContext = WEBKIT_WEB_CONTEXT(g_object_new(WEBKIT_TYPE_WEB_CONTEXT,
+                                                                "website-data-manager", wkDataManager,
+                                                                "memory-pressure-settings", memoryPressureSettings,
+                                                                "service-worker-memory-pressure-settings", serviceWorkerMemoryPressureSettings,
+                                                                nullptr));
+                }
+                webkit_memory_pressure_settings_free(serviceWorkerMemoryPressureSettings);
+            }
+            else if (memoryPressureMonitorMode.has_value())
+            {
                 wkContext = WEBKIT_WEB_CONTEXT(g_object_new(WEBKIT_TYPE_WEB_CONTEXT,
                                                             "website-data-manager", wkDataManager,
                                                             "memory-pressure-settings", memoryPressureSettings,
-                                                            "service-worker-memory-pressure-settings", serviceWorkerMemoryPressureSettings,
+                                                            "memory-pressure-monitor-mode", *memoryPressureMonitorMode,
                                                             nullptr));
-                webkit_memory_pressure_settings_free(serviceWorkerMemoryPressureSettings);
             }
             else
             {

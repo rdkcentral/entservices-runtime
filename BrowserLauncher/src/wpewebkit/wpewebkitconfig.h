@@ -118,6 +118,11 @@ public:
         return m_launchConfig->maxMemorySavingIterations();
     }
 
+    inline bool memoryMonitorUseContainerMode() const
+    {
+        return m_launchConfig->memoryMonitorUseContainerMode();
+    }
+
 private:
     static std::string escapeJavascriptString(const std::string &str);
 

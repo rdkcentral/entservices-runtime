@@ -839,6 +839,14 @@ WebKitSettings* WpeWebKitConfig::webKitSettings() const
         g_warning("Page Lifecycle V2 is not supported");
     }
 
+    const char kOpportunisticSweepingAndGCPropName[] = "opportunistic-sweeping-and-gc";
+    if (webKitVersion >= VersionNumber(2, 46, 0) &&
+        g_object_class_find_property(G_OBJECT_GET_CLASS(preferences), kOpportunisticSweepingAndGCPropName))
+    {
+        g_object_set(G_OBJECT(preferences), kOpportunisticSweepingAndGCPropName,
+                     m_launchConfig->opportunisticSweepingAndGC() ? TRUE : FALSE, nullptr);
+    }
+
     return preferences;
 }
 

@@ -70,4 +70,6 @@ public:
     virtual int indexedDBStorageQuotaRatio() const = 0;
     virtual int maxMemorySavingIterations() const = 0;
     virtual bool enableLifecycle2() const = 0;
+    virtual bool memoryMonitorUseContainerMode() const = 0;
+    virtual bool opportunisticSweepingAndGC() const = 0;
 };
