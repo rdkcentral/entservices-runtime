@@ -44,6 +44,7 @@ private:
     void onBrowserClose(CloseReason);
     void onLifecycleStateChanged(std::vector<Firebolt::Lifecycle::StateChange>);
     void onFocusedChanged(bool);
+    void onHdrFormatChanged(Firebolt::Device::HDRFormat hdr_format);
 
     BrowserInterface * const m_browser;
     std::shared_ptr<LaunchConfigInterface> m_launchConfig;

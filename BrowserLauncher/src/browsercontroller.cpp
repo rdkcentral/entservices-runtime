@@ -126,6 +126,31 @@ void BrowserController::onFireboltConnected()
             g_warning("lifecycle.subscribeOnStateChanged failed, error code = %d", result.error());
         }
     }
+
+    // get device capabilities
+    {
+        auto &device = Firebolt::IFireboltAccessor::Instance().DeviceInterface();
+        Result<SubscriptionId> result = device.subscribeOnHdrChanged([this](const Device::HDRFormat& hdrFormat) {
+            m_mainRunLoop->InvokeTask([this, hdrFormat = hdrFormat]() {
+                onHdrFormatChanged(hdrFormat);
+            });
+        });
+        if (!result)
+        {
+            g_warning("device.subscribeOnHdrChanged failed, error code = %d", result.error());
+        }
+        Result<Device::HDRFormat> hdrFormat = device.hdr();
+        if (!hdrFormat)
+        {
+            g_warning("device.hdr failed, error code = %d", hdrFormat.error());
+        }
+        else
+        {
+            m_mainRunLoop->InvokeTask([this, hdrFormat = hdrFormat.value()]() {
+                onHdrFormatChanged(hdrFormat);
+            });
+        }
+    }
 }
 
 void BrowserController::onBrowserClose(CloseReason reason)
@@ -207,4 +232,17 @@ void BrowserController::onFocusedChanged(bool focused)
     {
         m_browser->setState(focused ? PageLifecycleState::ACTIVE : PageLifecycleState::PASSIVE);
     }
+}
+
+void BrowserController::onHdrFormatChanged(Firebolt::Device::HDRFormat hdrFormat)
+{
+    g_assert(g_main_context_is_owner (g_main_context_default()));
+
+    bool supportsHdr =
+        hdrFormat.hdr10 ||
+        hdrFormat.hdr10Plus ||
+        hdrFormat.dolbyVision ||
+        hdrFormat.hlg;
+
+    m_browser->setScreenSupportsHDR(supportsHdr);
 }

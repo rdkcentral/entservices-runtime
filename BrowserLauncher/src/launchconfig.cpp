@@ -133,6 +133,7 @@ namespace
             std::error_code ec;
             if (fs::exists(fullPath, ec))
                 return LocalFilePath(fullPath);
+            g_warning("Specified path('%s') doesn't exist in local package dir('%s').", val.c_str(), DEFAULT_LOCAL_FILE_DIR);
             return {};
         }
         else if constexpr (std::is_same_v<T, std::vector<LocalFilePath>>)
