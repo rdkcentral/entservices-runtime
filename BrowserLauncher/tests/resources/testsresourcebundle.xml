@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <gresource prefix="/org/rdk/tests">
+    <file compressed="true" alias="page_lifecycle.html">page_lifecycle.html</file>
+    <file compressed="true" alias="media_capabilities.html">media_capabilities.html</file>
+  </gresource>
+</gresources>
