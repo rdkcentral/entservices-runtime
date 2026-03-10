@@ -261,7 +261,6 @@ public:
         , _didLogLaunchMetrics(false)
         , _lastLoggedApp()
         {
-            Utils::Telemetry::init();
         }
     ~SysLogOuput() override
     {
