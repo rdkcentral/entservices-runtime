@@ -80,26 +80,29 @@ static void preLoadWPE(const std::string& runtimeDir)
     };
 
     // try runtime dir
-    for (const auto& version : webkitVersions)
+    for (const auto& rpathOrigin : {"wpewebkit", "../.."})
     {
-        gchar_ptr execDir {g_build_filename(runtimeDir.c_str(), "wpewebkit", "libexec", version.c_str(), nullptr)};
-        if (g_file_test(execDir.get(), G_FILE_TEST_EXISTS))
+        for (const auto& version : webkitVersions)
         {
-            gchar_ptr libDir { g_build_filename(runtimeDir.c_str(), "wpewebkit", "lib", nullptr) };
-            gchar_ptr bundleDir { g_build_filename(libDir.get(), version.c_str(), "injected-bundle", nullptr) };
-            gchar_ptr webkitLibFilePattern { g_strdup_printf("%s/%s", libDir.get(), "libWPEWebKit-[0-9]*.so.*") };
-            if (!preLoadLib(webkitLibFilePattern.get()))
+            gchar_ptr execDir {g_build_filename(runtimeDir.c_str(), rpathOrigin, "libexec", version.c_str(), nullptr)};
+            if (g_file_test(execDir.get(), G_FILE_TEST_EXISTS))
             {
-                g_error("Could not preload %s from %s/...", version.c_str(), webkitLibFilePattern.get());
-            }
-            else
-            {
-                g_message("Preloaded %s from %s...", version.c_str(), webkitLibFilePattern.get());
-                g_setenv("WEBKIT_EXEC_PATH", execDir.get(), false);
-                g_setenv("WEBKIT_INJECTED_BUNDLE_PATH", bundleDir.get(), false);
-                g_message("WEBKIT_EXEC_PATH = %s", g_getenv("WEBKIT_EXEC_PATH"));
-                g_message("WEBKIT_INJECTED_BUNDLE_PATH = %s", g_getenv("WEBKIT_INJECTED_BUNDLE_PATH"));
-                return;
+                gchar_ptr libDir { g_build_filename(runtimeDir.c_str(), rpathOrigin, "lib", nullptr) };
+                gchar_ptr bundleDir { g_build_filename(libDir.get(), version.c_str(), "injected-bundle", nullptr) };
+                gchar_ptr webkitLibFilePattern { g_strdup_printf("%s/%s", libDir.get(), "libWPEWebKit-[0-9]*.so.*") };
+                if (!preLoadLib(webkitLibFilePattern.get()))
+                {
+                    g_error("Could not preload %s from %s/...", version.c_str(), webkitLibFilePattern.get());
+                }
+                else
+                {
+                    g_message("Preloaded %s from %s...", version.c_str(), webkitLibFilePattern.get());
+                    g_setenv("WEBKIT_EXEC_PATH", execDir.get(), false);
+                    g_setenv("WEBKIT_INJECTED_BUNDLE_PATH", bundleDir.get(), false);
+                    g_message("WEBKIT_EXEC_PATH = %s", g_getenv("WEBKIT_EXEC_PATH"));
+                    g_message("WEBKIT_INJECTED_BUNDLE_PATH = %s", g_getenv("WEBKIT_INJECTED_BUNDLE_PATH"));
+                    return;
+                }
             }
         }
     }
