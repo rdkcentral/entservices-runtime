@@ -447,12 +447,37 @@ void WpeWebKitConfig::setEnvironment() const
 {
     g_info("creating wpewebkit environment");
 
-    if (m_launchConfig->isHeadless())
+    // Pick the WPE backend (default or headless) and point WPE_BACKEND_LIBRARY
+    // at the copy shipped inside the widget runtime if present. When the
+    // widget is mounted outside of ld.so's default search and the host
+    // ld.so.cache, a bare-name dlopen("libWPEBackend-default.so") from libwpe
+    // would fail; setting the full path here covers both default and headless
+    // cases. Look inside the widget runtime first and fall back to the host
+    // system path; emit a warning if neither location has the library.
+    const char* backendName = m_launchConfig->isHeadless()
+                                  ? "libWPEBackend-headless.so"
+                                  : "libWPEBackend-default.so";
+    fs::path widgetBackend = fs::path(m_launchConfig->runtimeDir()) / "usr/lib" / backendName;
+    fs::path systemBackend = fs::path("/usr/lib") / backendName;
+
+    std::error_code ec;
+    if (fs::exists(widgetBackend, ec))
     {
-        // set the headless backend
-        setEnvVar("WPE_BACKEND_LIBRARY", "/usr/lib/libWPEBackend-headless.so", true);
+        setEnvVar("WPE_BACKEND_LIBRARY", widgetBackend.string(), true);
+    }
+    else if (fs::exists(systemBackend, ec))
+    {
+        setEnvVar("WPE_BACKEND_LIBRARY", systemBackend.string(), true);
     }
     else
+    {
+        g_warning("WPE backend library %s not found in %s or %s",
+                  backendName,
+                  widgetBackend.string().c_str(),
+                  systemBackend.string().c_str());
+    }
+
+    if (!m_launchConfig->isHeadless())
     {
         // assume 1080p by default, the correct resolution will be set later after egl target is created
         setEnvVar("WEBKIT_RESOLUTION_WIDTH", "1920", false);
