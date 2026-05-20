@@ -1263,10 +1263,15 @@ void WpeWebKitView::initWebExtensionsCallback(WebKitWebContext *context,
 
     auto common   = self->m_config->commonExtensionSettings();
 
+
     GVariantBuilder builder;
     g_variant_builder_init(&builder, G_VARIANT_TYPE("a{sv}"));
 
     g_variant_builder_add(&builder, "{sv}", "common",   common.release());
+
+    // get firebolt extension settings and add to the builder
+    auto firebolt = self->m_config->fireboltExtensionSettings();
+    g_variant_builder_add(&builder, "{sv}", "firebolt", firebolt.release());
 
     // set the user data for (all) the extensions
     GVariant *data = g_variant_builder_end(&builder);

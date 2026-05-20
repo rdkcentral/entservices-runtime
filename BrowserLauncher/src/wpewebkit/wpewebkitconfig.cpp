@@ -635,11 +635,17 @@ std::vector<std::string> WpeWebKitConfig::userScripts() const
         std::string script;
         std::stringstream scriptStream;
 
-        const std::string fireboltEndpoint = m_launchConfig->fireboltEndpoint();
-        if (!fireboltEndpoint.empty())
+        // Do not expose the firebolt endpoint if the extension is enabled, 
+        // as the extension will handle that and also it is not needed to expose 
+        // it to the window object in that case
+        if (!m_launchConfig->wpeFireboltExtensionEnabled())
         {
-            scriptStream << "window.__firebolt = { endpoint: '"
-                         << escapeJavascriptString(fireboltEndpoint) << "' };\n";
+            const std::string fireboltEndpoint = m_launchConfig->fireboltEndpoint();
+            if (!fireboltEndpoint.empty())
+            {
+                scriptStream << "window.__firebolt = { endpoint: '"
+                             << escapeJavascriptString(fireboltEndpoint) << "' };\n";
+            }
         }
 
         // is this still needed ?
@@ -926,6 +932,51 @@ GVariantRef WpeWebKitConfig::commonExtensionSettings() const
     return GVariantRef { g_variant_builder_end(&builder) };
 }
 
+/*!
+    Returns a set of settings specific to the Firebolt extension.
+ */
+GVariantRef WpeWebKitConfig::fireboltExtensionSettings() const
+{
+    GVariantBuilder builder;
+    g_variant_builder_init(&builder, G_VARIANT_TYPE("a{sv}"));
+
+    // Diable wpeFireboltExtension by default
+    g_variant_builder_add(&builder, "{sv}", "wpeFireboltEnabled",
+                          g_variant_new_boolean(FALSE));
+
+    // GET WPE_FIREBOLT_EXTENSION environment variable is enabled
+    const char* fireboltExtensionEnv = g_getenv("WPE_FIREBOLT_EXTENSION");
+    // check if fireboltExtensionEnv is set to true, if so then inject the firebolt endpoint into the extension settings so it can be used by the extension
+
+    if (fireboltExtensionEnv && fireboltExtensionEnv[0] && strcmp(fireboltExtensionEnv, "true") == 0)
+    {
+        if (!m_launchConfig->fireboltEndpoint().empty())
+        {
+            g_variant_builder_add(&builder, "{sv}", "fireboltEndpoint",
+                          g_variant_new_string(m_launchConfig->fireboltEndpoint().c_str()));
+
+            // GET FIREBOLT_USER_SCRIPT environment variable
+            const char* fireboltUserScriptEnv = g_getenv("FIREBOLT_USER_SCRIPT");
+            if (fireboltUserScriptEnv && fireboltUserScriptEnv[0]) {
+                g_variant_builder_add(&builder, "{sv}", "fireboltUserScript",
+                              g_variant_new_string(fireboltUserScriptEnv));
+                
+                g_variant_builder_add(&builder, "{sv}", "wpeFireboltEnabled",
+                          g_variant_new_boolean(TRUE));
+            }
+            else {
+                g_warning("FIREBOLT_USER_SCRIPT environment variable is not set, firebolt extension will be disabled");
+            }
+        } else {
+            g_warning("WPE_FIREBOLT_EXTENSION environment variable is set to true but firebolt endpoint is not set, firebolt extension will be disabled");
+        }
+        
+    } else {
+        g_warning("WPE_FIREBOLT_EXTENSION environment variable is not set to true, firebolt extension will be disabled");
+    }
+
+    return GVariantRef { g_variant_builder_end(&builder) };
+}
 
 /*!
     Returns an html page contents to display when an load-failure error occurs.

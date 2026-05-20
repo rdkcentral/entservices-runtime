@@ -52,6 +52,9 @@ public:
     std::string extensionsDirectory() const;
     GVariantRef commonExtensionSettings() const;
 
+    // New Settings for Firebolt Extension
+    GVariantRef fireboltExtensionSettings() const;
+
     inline LoadFailurePolicy loadFailurePolicy() const
     {
         return m_launchConfig->loadFailurePolicy();

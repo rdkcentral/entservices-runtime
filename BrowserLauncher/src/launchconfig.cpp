@@ -262,6 +262,9 @@ LaunchConfig::LaunchConfig(const std::string &configPath)
     if (const auto* endpoint = g_getenv("FIREBOLT_ENDPOINT"); endpoint != nullptr)
         m_fireboltEndpoint = endpoint;
 
+    if (const auto* wpeFireboltExtensionEnabledEnv = g_getenv("WPE_FIREBOLT_EXTENSION_ENABLED"); wpeFireboltExtensionEnabledEnv != nullptr)
+        m_wpeFireboltExtensionEnabled = (strcmp(wpeFireboltExtensionEnabledEnv, "true") == 0);
+
     if (const char* env = g_getenv("LANG"); env != nullptr)
     {
         std::string lang { env };
