@@ -26,7 +26,7 @@
 class WebSocketClient
 {
 public:
-    WebSocketClient(WebKitWebPage *page, const char *url);
+    WebSocketClient(const char *url);
     ~WebSocketClient();
 
     bool Connect(std::function<void(const bool)>&& onConnect,
@@ -35,7 +35,6 @@ public:
     void SendMessage(const std::string& message);
 
 private:
-    GWeakRef *m_page;
     char *m_url;
     SoupSession *m_session { nullptr };
     SoupWebsocketConnection *m_conn { nullptr };

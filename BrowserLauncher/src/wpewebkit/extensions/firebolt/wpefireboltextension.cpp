@@ -155,7 +155,7 @@ static JSCValue* connect_cb(JSCContext* ctx,
     if (state->connected) {
         g_print("Already connected, ignoring connect call\n");
     } else {
-        state->wsClient = std::make_unique<WebSocketClient>(static_cast<WebKitWebPage*>(user_data), state->fireboltEndpoint.c_str());
+        state->wsClient = std::make_unique<WebSocketClient>(state->fireboltEndpoint.c_str());
         state->connected = state->wsClient->Connect(
             // onConnect callback
             [ctx, page=static_cast<WebKitWebPage*>(user_data)](const bool success) {
@@ -348,7 +348,7 @@ static void inject_wpe_firebolt_transport(JSCContext *ctx)
     // Define window.__wpe_firebolt_transport__ as non-writable, non-configurable
     jsc_value_object_define_property(
         global,
-        "__wpe_firebolt_transport__",
+        "__firebolt_transport__",
         JSC_VALUE_PROPERTY_CONFIGURABLE, FALSE,
         JSC_VALUE_PROPERTY_WRITABLE,     FALSE,
         JSC_VALUE_PROPERTY_ENUMERABLE,   TRUE,
@@ -359,7 +359,7 @@ static void inject_wpe_firebolt_transport(JSCContext *ctx)
 
     JSCValue* freeze = jsc_context_evaluate(
         ctx,
-        "Object.freeze(window.__wpe_firebolt_transport__)",
+        "Object.freeze(window.__firebolt_transport__)",
         -1
     );
     g_object_unref(freeze);
@@ -434,17 +434,17 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
     g_free(js_source);
     
 
-    // check if script injects window.ServiceManager if not exit
-    JSCValue* serviceManager = jsc_value_object_get_property(jsContext, "ServiceManager");
+    // check if script injects window.FireboltServiceManager if not exit
+    JSCValue* serviceManager = jsc_value_object_get_property(jsContext, "FireboltServiceManager");
     if (!serviceManager || !jsc_value_is_object(serviceManager)) {
-        g_warning("failed to get the ServiceManager object");
+        g_warning("failed to get the FireboltServiceManager object");
         goto cleanup;
     }
     
-    // check if ServiceManager has a configure function, if not exit
+    // check if FireboltServiceManager has a configure function, if not exit
     JSCValue* serviceManagerCfg = jsc_value_object_get_property(serviceManager, "configure");
     if (!serviceManagerCfg || ! jsc_value_is_function(serviceManagerCfg)) { {
-        g_warning("ServiceManager.configure is not a function");
+        g_warning("FireboltServiceManager.configure is not a function");
         goto cleanup;
     }
         
@@ -456,10 +456,10 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
     JSCValue* cid    = jsc_value_new_string(jsContext, clientId);
     jsc_value_object_set_property(configObject, "clientId", cid);
     
-    // call ServiceManager.configure(configObject)
+    // call FireboltServiceManager.configure(configObject)
     JSCValue* configureResult = jsc_value_function_call(serviceManagerCfg, JSC_TYPE_VALUE, &configObject,  G_TYPE_NONE);
     if (!configureResult) {
-        g_warning("failed to call ServiceManager.configure");
+        g_warning("failed to call FireboltServiceManager.configure");
         goto cleanup;
     }
 

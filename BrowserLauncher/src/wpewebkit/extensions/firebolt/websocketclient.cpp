@@ -23,9 +23,8 @@ static inline SoupFunctions& soup() {
     return SoupFunctions::get();
 }
 
-WebSocketClient::WebSocketClient(WebKitWebPage *page, const char *url)
-    : m_page(g_weak_ref_new(page))
-    , m_url(g_strdup(url))
+WebSocketClient::WebSocketClient(const char *url)
+    : m_url(g_strdup(url))
 {
 }
 
@@ -40,7 +39,6 @@ WebSocketClient::~WebSocketClient()
         m_session = nullptr;
     }
     g_free(m_url);
-    g_weak_ref_clear(m_page);
 }
 
 bool WebSocketClient::Connect(std::function<void(const bool)>&& onConnect,
