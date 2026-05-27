@@ -21,6 +21,16 @@
  #include <optional>
  #include <string>
  #include <glib.h>
+ #include "asyncbus.h"
+
+
+struct PageState {
+    std::unique_ptr<AsyncBus> messageBus;
+    std::unique_ptr<AsyncBus> connectionBus;
+    std::string clientId;
+    std::string fireboltEndpoint;
+    bool connected = false;
+};
 
 
 static gboolean read_file_to_string(const char* path, gchar** out, gsize* out_len)
@@ -34,26 +44,305 @@ static gboolean read_file_to_string(const char* path, gchar** out, gsize* out_le
     return TRUE;
 }
 
-// -----------------------------------------------------------------------------
-/*!
-    \internal
-
-    Called when the JS code calls 'window.ServiceManager.getService('firebolt')'.
-
- */
-static JSCValue* getFireboltObject(gpointer userData)
+static char* generate_client_id()
 {
-    auto page = reinterpret_cast<WebKitWebPage*>(userData);
+    guint64 r =
+        ((guint64)g_random_int() << 32) |
+         (guint64)g_random_int();
 
-    // get the firebolt endpoint url from the page's data
-    gpointer fireboltEndpointPtr = g_object_get_data(G_OBJECT(page), "fireboltEndpoint");
-    if (!fireboltEndpointPtr) {
-        g_warning("Firebolt endpoint not found in page data");
-        return nullptr;
+    return g_strdup_printf("%016" G_GINT64_MODIFIER "x", r);
+}
+
+
+static PageState* get_page_state(WebKitWebPage* page)
+{
+    return static_cast<PageState*>(
+        g_object_get_data(G_OBJECT(page), "page-state")
+    );
+}
+
+constexpr int PAGE_STATE_UNAVAILABLE = 1001;
+constexpr int INVALID_PARAMETERS = 1002;
+constexpr int PAGE_STATE_CLIENT_ID_MISSING = 1003;
+constexpr int CLIENT_ID_MISMATCH = 1004;
+
+static JSCValue* create_result(JSCContext* ctx,
+                              bool success,
+                              int errorCode)
+{
+    JSCValue* result = jsc_value_new_object(ctx, nullptr, nullptr);
+
+    // success: boolean
+    jsc_value_object_set_property(
+        result,
+        "success",
+        jsc_value_new_boolean(ctx, success)
+    );
+
+    // errorCode only when failure
+    if (!success) {
+        jsc_value_object_set_property(
+            result,
+            "errorCode",
+            jsc_value_new_int32(ctx, errorCode)
+        );
     }
 
-    
+    return result;
 }
+
+static bool authorize(JSCContext* ctx,
+        size_t n_params,
+        const JSCValue* params[],
+        WebKitWebPage* page,
+        JSCValue* result) {
+    if (n_params <1 && !jsc_value_is_string((JSCValue*)params[0])) {
+        g_warning("connect requires a clientId string parameter");
+        result = create_result(ctx, false, INVALID_PARAMETERS);
+        return false;
+    }
+
+    auto* state = get_page_state(page);
+    if (!state) {
+        g_warning("page state is unavailable");
+        result = create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
+        return false;
+    }
+       
+    
+    char* jsClientId = jsc_value_to_string((JSCValue*)params[0]);
+    if (!jsClientId) {
+        g_warning("clientId parameter is missing or not a string");
+        result = create_result(ctx, false, PAGE_STATE_CLIENT_ID_MISSING);
+        return false;
+    }
+    
+    // 3. Compare with PageState clientId
+    bool match = (state->clientId == jsClientId);
+
+    if (!match) {
+        // clientId mismatch → reject connect
+        g_warning("clientId mismatch: expected %s provided %s", state->clientId.c_str(), jsClientId);
+        g_free(jsClientId);
+        result = create_result(ctx, false, CLIENT_ID_MISMATCH);
+        return false;
+    }
+    g_free(jsClientId);
+    return true;
+}
+
+
+static JSCValue* connect_cb(JSCContext* ctx,
+        JSCValue* function,
+        JSCValue* this_val,
+        size_t n_params,
+        const JSCValue* params[],
+        gpointer user_data)
+{
+    // Native implementation
+    // params[] are JS arguments
+    g_print("connect called\n");
+    JSCValue* result = nullptr;
+    if (!authorize(ctx, n_params, params, static_cast<WebKitWebPage*>(user_data), result)) {
+        return result;
+    }
+
+    auto* state = get_page_state(static_cast<WebKitWebPage*>(user_data));
+    // connect using websocket to the firebolt endpoint and set state->connected = true if successful
+    // check page state for already connected
+    if (state->connected) {
+        g_print("Already connected, ignoring connect call\n");
+    } else {
+        // TODO: add logic for websocket connection
+    }
+
+    return create_result(ctx, true, 0);
+}
+
+static JSCValue* send_cb(JSCContext* ctx,
+        JSCValue* function,
+        JSCValue* this_val,
+        size_t n_params,
+        const JSCValue* params[],
+        gpointer user_data)
+{
+    // Native implementation
+    // params[] are JS arguments
+    g_print("send called\n");
+
+    JSCValue* result = nullptr;
+    if (!authorize(ctx, n_params, params, static_cast<WebKitWebPage*>(user_data), result)) {
+        return result;
+    }
+
+    return create_result(ctx, true, 0);
+}
+
+static JSCValue* on_connection_status_cb(JSCContext* ctx,
+              JSCValue*,
+              JSCValue*,
+              size_t n_params,
+              const JSCValue* params[],
+              gpointer user_data)
+{
+    
+    JSCValue* result = nullptr;
+    if (!authorize(ctx, n_params, params, static_cast<WebKitWebPage*>(user_data), result)) {
+        return result;
+    }
+    
+    auto* state = get_page_state(static_cast<WebKitWebPage*>(user_data));
+    if (!state)
+        return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
+    
+    guint id = state->connectionBus->addListener(
+            ctx,
+            (JSCValue*)params[0]
+        );
+    
+    // unsubscribe()
+    return jsc_value_new_function(
+        ctx,
+        "off",
+        G_CALLBACK(+[](JSCContext* ctx,
+                       JSCValue*,
+                       JSCValue*,
+                       size_t,
+                       const JSCValue**,
+                       gpointer data) -> JSCValue*
+        {
+            auto* tuple = static_cast<std::pair<PageState*, guint>*>(data);
+            tuple->first->connectionBus->removeListener(tuple->second);
+            return create_result(ctx, true, 0);
+        }),
+        new std::pair<PageState*, guint>(state, id),
+        [](gpointer p) {
+            delete static_cast<std::pair<PageState*, guint>*>(p);
+        },
+        JSC_TYPE_VALUE,
+        0
+    );
+
+}
+
+static JSCValue* on_message_cb(JSCContext* ctx,
+              JSCValue*,
+              JSCValue*,
+              size_t n_params,
+              const JSCValue* params[],
+              gpointer user_data)
+{
+    JSCValue* result = nullptr;
+    if (!authorize(ctx, n_params, params, static_cast<WebKitWebPage*>(user_data), result)) {
+        return result;
+    }
+
+    auto* page = static_cast<WebKitWebPage*>(user_data);
+    auto* state = get_page_state(page);
+    if (!state)
+        return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
+    
+    guint id = state->messageBus->addListener(
+            ctx,
+            (JSCValue*)params[0]
+        );
+    
+    // unsubscribe()
+    return jsc_value_new_function(
+        ctx,
+        "off",
+        G_CALLBACK(+[](JSCContext* ctx,
+                       JSCValue*,
+                       JSCValue*,
+                       size_t,
+                       const JSCValue**,
+                       gpointer data) -> JSCValue*
+        {
+            auto* tuple = static_cast<std::pair<PageState*, guint>*>(data);
+            tuple->first->messageBus->removeListener(tuple->second);
+            return create_result(ctx, true, 0);
+        }),
+        new std::pair<PageState*, guint>(state, id),
+        [](gpointer p) {
+            delete static_cast<std::pair<PageState*, guint>*>(p);
+        },
+        JSC_TYPE_VALUE,
+        0
+    );
+
+}
+
+static void inject_wpe_firebolt_transport(JSCContext *ctx)
+{
+    JSCValue *global = jsc_context_get_global_object(ctx);
+
+    // Create platform object
+    JSCValue *platform = jsc_value_new_object(ctx, NULL, NULL);
+
+    // Create connect() function
+    JSCValue *connect_fn = jsc_value_new_function(
+        ctx,
+        "connect",
+        G_CALLBACK(connect_cb),
+        NULL,
+        NULL,
+        JSC_TYPE_VALUE,
+        0
+    );
+
+    jsc_value_object_set_property(platform, "connect", connect_fn);
+
+    // onConnectionStatus()
+    JSCValue *on_conn_status_fn = jsc_value_new_function(
+      ctx, "onConnectionStatus", G_CALLBACK(on_connection_status_cb),
+      NULL, NULL, JSC_TYPE_VALUE, 0);
+    jsc_value_object_set_property(platform, "onConnectionStatus", on_conn_status_fn);
+
+    JSCValue *send_fn = jsc_value_new_function(
+        ctx,
+        "send",
+        G_CALLBACK(send_cb),
+        NULL,
+        NULL,
+        JSC_TYPE_VALUE,
+        0
+    );
+
+    jsc_value_object_set_property(platform, "send", send_fn);
+
+    // onMessage()
+    JSCValue *on_message_fn = jsc_value_new_function(
+      ctx, "onMessage", G_CALLBACK(on_message_cb),
+      NULL, NULL, JSC_TYPE_VALUE, 0);
+    jsc_value_object_set_property(platform, "onMessage", on_message_fn);
+
+
+    // Define window.__wpe_firebolt_transport__ as non-writable, non-configurable
+    jsc_value_object_define_property(
+        global,
+        "__wpe_firebolt_transport__",
+        JSC_VALUE_PROPERTY_CONFIGURABLE, FALSE,
+        JSC_VALUE_PROPERTY_WRITABLE,     FALSE,
+        JSC_VALUE_PROPERTY_ENUMERABLE,   TRUE,
+        JSC_VALUE_PROPERTY_VALUE,        platform,
+        JSC_VALUE_PROPERTY_NONE
+    );
+
+
+    JSCValue* freeze = jsc_context_evaluate(
+        ctx,
+        "Object.freeze(window.__wpe_firebolt_transport__)",
+        -1
+    );
+    g_object_unref(freeze);
+    g_object_unref(connect_fn);
+    g_object_unref(on_conn_status_fn);
+    g_object_unref(send_fn);
+    g_object_unref(on_message_fn);
+    g_object_unref(platform);
+    g_object_unref(global);
+}
+
 
 
 // -----------------------------------------------------------------------------
@@ -94,45 +383,97 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
     {
         g_warning("firebolt extension enabled, but no injected script URL set, "
                    "disabling firebolt bridge support");
+        goto cleanup;
     }
-    else
-    {
-        // inject a javascript file into the page
-        g_print("Injecting Firebolt bridge script from URL: %s\n", fireboltUserScript);
+    
+    // inject a javascript file into the page
+    g_print("Injecting Firebolt bridge script from URL: %s\n", fireboltUserScript);
+    
+    
+    if (!read_file_to_string(fireboltUserScript, &js_source, &js_len)) {
+        g_warning("failed to read the injected JS code from file");
+        goto cleanup;
+    }
+
+    gchar* js_source = NULL;
+    gsize js_len = 0;
+    JSCValue* result = jsc_context_evaluate(jsContext, js_source, js_len, fireboltUserScript);
+    if (!result) {
+        g_warning("failed to evaluate the injected JS code");
+        goto cleanup;
+    }
+    g_object_unref(result);
+    g_free(js_source);
+    
+
+    // check if script injects window.ServiceManager if not exit
+    JSCValue* serviceManager = jsc_value_object_get_property(jsContext, "ServiceManager");
+    if (!serviceManager || !jsc_value_is_object(serviceManager)) {
+        g_warning("failed to get the ServiceManager object");
+        goto cleanup;
+    }
+    
+    // check if ServiceManager has a configure function, if not exit
+    JSCValue* serviceManagerCfg = jsc_value_object_get_property(serviceManager, "configure");
+    if (!serviceManagerCfg || ! jsc_value_is_function(serviceManagerCfg)) { {
+        g_warning("ServiceManager.configure is not a function");
+        goto cleanup;
+    }
         
-        gchar* js_source = NULL;
-        gsize js_len = 0;
+    char *clientId = generate_client_id();
 
-        if (!read_file_to_string(fireboltUserScript, &js_source, &js_len)) {
-            return;
-        } else {
-            JSCValue* result = jsc_context_evaluate(jsContext, js_source, js_len, fireboltUserScript);
-            if (!result) {
-                g_warning("failed to evaluate the injected JS code");
-            } else {
-                g_print("Successfully injected Firebolt bridge script.\n");
-            }
-            g_object_unref(result);
-            g_free(js_source);
-
-            // store the firebolt endpoint url in the page's data, so we can access it later when needed
-            g_object_set_data(G_OBJECT(page), "fireboltEndpoint", g_strdup(fireboltEndpoint));
-            
-            // create the binding for ServiceManager, so the injected JS code can call into it to get the service URLs
-            JSCValue* *serviceManager = jsc_context_get_value(jsContext, "ServiceManager");
-            if (!serviceManager) {
-                // service manager doesn't exist yet, log error and return
-                g_warning("ServiceManager object not found in JS context, creating it.");
-                return;
-            } else {
-                JSCValue* *getFireboltObjectCallback = jsc_value_new_function(jsContext, nullptr, G_CALLBACK(getFireboltObject), page, nullptr, JSC_TYPE_VALUE,0,G_TYPE_NONE);
-                jsc_value_object_set_property(jsObject, "getFireboltObject", getFireboltObjectCallback);
-                g_object_unref(getFireboltObjectCallback);
-                g_print("Successfully set up ServiceManager.getFireboltObject binding.\n");
-            }
-            g_object_unref(serviceManager);
-        }
+    // create config object to pass to the configure function, 
+    // currently only contains the clientId, but can be extended in the future if needed
+    JSCValue* configObject = jsc_value_new_object(jsContext, nullptr, nullptr);
+    JSCValue* cid    = jsc_value_new_string(jsContext, clientId);
+    jsc_value_object_set_property(configObject, "clientId", cid);
+    
+    // call ServiceManager.configure(configObject)
+    JSCValue* configureResult = jsc_value_function_call(serviceManagerCfg, JSC_TYPE_VALUE, &configObject,  G_TYPE_NONE);
+    if (!configureResult) {
+        g_warning("failed to call ServiceManager.configure");
+        goto cleanup;
     }
+
+    g_object_unref(configureResult);
+    g_object_unref(cid);
+    g_object_unref(serviceManagerCfg);
+    g_object_unref(serviceManager);
+
+    auto* state = new PageState();
+    state->messageBus = std::make_unique<AsyncBus>(g_main_context_default());
+    state->connectionBus = std::make_unique<AsyncBus>(g_main_context_default());
+    state->clientId = clientId;
+    g_free(clientId);
+    state->fireboltEndpoint = fireboltEndpoint;
+    g_free(fireboltEndpoint);
+
+    state->connected = false;
+
+    g_object_set_data_full(
+            G_OBJECT(page),
+            "page-state",
+            state,
+            [](gpointer p) {
+                delete static_cast<PageState*>(p);
+            }
+        );
+    
+    inject_wpe_firebolt_transport(jsContext);
+
+    goto cleanup;
+    
+    cleanup:
+    if (jsContext) g_object_unref(jsContext);
+    if (js_source) g_free(js_source);
+    if (fireboltEndpoint) g_free(fireboltEndpoint);
+    if (fireboltUserScript) g_free(fireboltUserScript);
+    if (configureResult) g_object_unref(configureResult);
+    if (cid) g_object_unref(cid);
+    if (serviceManagerCfg) g_object_unref(serviceManagerCfg);
+    if (clientId) g_free(clientId);
+    if (serviceManager) g_object_unref(serviceManager);
+    return;
 }
 
 
