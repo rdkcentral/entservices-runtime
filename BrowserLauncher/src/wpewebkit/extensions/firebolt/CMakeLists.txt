@@ -19,6 +19,7 @@ add_library( WpeFireboltExtension
         SHARED
         wpefireboltextension.cpp
         asyncbus.cpp
+        websocketclient.cpp
         )
 
 target_compile_definitions( WpeFireboltExtension

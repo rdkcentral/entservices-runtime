@@ -22,6 +22,7 @@
  #include <string>
  #include <glib.h>
  #include "asyncbus.h"
+ #include "websocketclient.h"
 
 
 struct PageState {
@@ -30,6 +31,7 @@ struct PageState {
     std::string clientId;
     std::string fireboltEndpoint;
     bool connected = false;
+    std::unique_ptr<WebSocketClient> wsClient;
 };
 
 
@@ -153,7 +155,24 @@ static JSCValue* connect_cb(JSCContext* ctx,
     if (state->connected) {
         g_print("Already connected, ignoring connect call\n");
     } else {
-        // TODO: add logic for websocket connection
+        state->wsClient = std::make_unique<WebSocketClient>(static_cast<WebKitWebPage*>(user_data), state->fireboltEndpoint.c_str());
+        state->connected = state->wsClient->Connect(
+            // onConnect callback
+            [ctx, page=static_cast<WebKitWebPage*>(user_data)](const bool success) {
+                auto* state = get_page_state(page);
+                if (state) {
+                    state->connected = success;
+                    state->connectionBus->emit(success);
+                }
+            },
+            // onMessage callback
+            [ctx, page=static_cast<WebKitWebPage*>(user_data)](const std::string& message) {
+                auto* state = get_page_state(page);
+                if (state) {
+                    state->messageBus->emit(message);
+                }
+            }
+        );
     }
 
     return create_result(ctx, true, 0);
@@ -173,6 +192,15 @@ static JSCValue* send_cb(JSCContext* ctx,
     JSCValue* result = nullptr;
     if (!authorize(ctx, n_params, params, static_cast<WebKitWebPage*>(user_data), result)) {
         return result;
+    }
+
+    auto* state = get_page_state(static_cast<WebKitWebPage*>(user_data));
+    if (state && state->wsClient) {
+        char* jsMessage = jsc_value_to_string((JSCValue*)params[0]);
+        if (jsMessage) {
+            state->wsClient->SendMessage(jsMessage);
+            g_free(jsMessage);
+        }
     }
 
     return create_result(ctx, true, 0);
