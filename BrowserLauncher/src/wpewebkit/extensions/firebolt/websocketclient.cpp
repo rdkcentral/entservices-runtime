@@ -30,14 +30,7 @@ WebSocketClient::WebSocketClient(const char *url)
 
 WebSocketClient::~WebSocketClient()
 {
-    if (m_conn) {
-        soup_websocket_connection_close(m_conn, 1000, "Normal Closure");
-        m_conn = nullptr;
-    }
-    if (m_session) {
-        g_object_unref(m_session);
-        m_session = nullptr;
-    }
+    Disconnect();
     g_free(m_url);
 }
 
@@ -127,4 +120,18 @@ void WebSocketClient::SendMessage(const std::string& message)
         return;
     }
     soup().websocket_connection_send_text(m_conn, message.c_str());
+}
+
+void WebSocketClient::Disconnect()
+{
+    if (m_conn) {
+        soup_websocket_connection_close(m_conn, 1000, "Normal Closure");
+        g_object_unref(m_conn);
+        m_conn = nullptr;
+    }
+    if (m_session) {
+        g_object_unref(m_session);
+        m_session = nullptr;
+    }
+    m_onConnect(false);
 }

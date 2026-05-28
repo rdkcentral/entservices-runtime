@@ -34,6 +34,8 @@ public:
     
     void SendMessage(const std::string& message);
 
+    bool Disconnect();
+
 private:
     char *m_url;
     SoupSession *m_session { nullptr };

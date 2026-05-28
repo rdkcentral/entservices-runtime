@@ -162,7 +162,7 @@ static JSCValue* connect_cb(JSCContext* ctx,
                 auto* state = get_page_state(page);
                 if (state) {
                     state->connected = success;
-                    state->connectionBus->emit(success);
+                    state->connectionBus->emit(success? "connected" : "disconnected");
                 }
             },
             // onMessage callback
@@ -173,6 +173,26 @@ static JSCValue* connect_cb(JSCContext* ctx,
                 }
             }
         );
+    }
+
+    return create_result(ctx, true, 0);
+}
+
+static JSCValue* disconnect_cb(JSCContext* ctx,
+        JSCValue* function,
+        JSCValue* this_val,
+        size_t n_params,
+        const JSCValue* params[],
+        gpointer user_data)
+{
+    if (!authorize(ctx, n_params, params, static_cast<WebKitWebPage*>(user_data), nullptr)) {
+        return create_result(ctx, false, INVALID_PARAMETERS);
+    }
+    
+    auto* state = get_page_state(static_cast<WebKitWebPage*>(user_data));
+    if (state && state->connected && state->wsClient) {
+        state->wsClient->Disconnect();
+        state->connected = false;
     }
 
     return create_result(ctx, true, 0);
@@ -194,9 +214,14 @@ static JSCValue* send_cb(JSCContext* ctx,
         return result;
     }
 
+    if (n_params <2 || !jsc_value_is_string((JSCValue*)params[1])) {
+        g_warning("send requires a message string parameter");
+        return create_result(ctx, false, INVALID_PARAMETERS);
+    }
+
     auto* state = get_page_state(static_cast<WebKitWebPage*>(user_data));
-    if (state && state->wsClient) {
-        char* jsMessage = jsc_value_to_string((JSCValue*)params[0]);
+    if (state && state->connected && state->wsClient) {
+        char* jsMessage = jsc_value_to_string((JSCValue*)params[1]);
         if (jsMessage) {
             state->wsClient->SendMessage(jsMessage);
             g_free(jsMessage);
@@ -222,10 +247,16 @@ static JSCValue* on_connection_status_cb(JSCContext* ctx,
     auto* state = get_page_state(static_cast<WebKitWebPage*>(user_data));
     if (!state)
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
+
+    
+    if (n_params <2 || !jsc_value_is_function((JSCValue*)params[1])) {
+        g_warning("onConnectionStatus requires a callback function parameter");
+        return create_result(ctx, false, INVALID_PARAMETERS);
+    }
     
     guint id = state->connectionBus->addListener(
             ctx,
-            (JSCValue*)params[0]
+            (JSCValue*)params[1]
         );
     
     // unsubscribe()
@@ -270,9 +301,14 @@ static JSCValue* on_message_cb(JSCContext* ctx,
     if (!state)
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     
+    if (n_params <2 || !jsc_value_is_function((JSCValue*)params[1])) {
+        g_warning("onMessage requires a callback function parameter");
+        return create_result(ctx, false, INVALID_PARAMETERS);
+    }
+    
     guint id = state->messageBus->addListener(
             ctx,
-            (JSCValue*)params[0]
+            (JSCValue*)params[1]
         );
     
     // unsubscribe()
@@ -317,14 +353,16 @@ static void inject_wpe_firebolt_transport(JSCContext *ctx)
         JSC_TYPE_VALUE,
         0
     );
-
     jsc_value_object_set_property(platform, "connect", connect_fn);
+    g_object_unref(connect_fn);
 
     // onConnectionStatus()
     JSCValue *on_conn_status_fn = jsc_value_new_function(
       ctx, "onConnectionStatus", G_CALLBACK(on_connection_status_cb),
       NULL, NULL, JSC_TYPE_VALUE, 0);
     jsc_value_object_set_property(platform, "onConnectionStatus", on_conn_status_fn);
+    g_object_unref(on_conn_status_fn);
+    
 
     JSCValue *send_fn = jsc_value_new_function(
         ctx,
@@ -335,16 +373,27 @@ static void inject_wpe_firebolt_transport(JSCContext *ctx)
         JSC_TYPE_VALUE,
         0
     );
-
     jsc_value_object_set_property(platform, "send", send_fn);
+    g_object_unref(send_fn);
 
     // onMessage()
     JSCValue *on_message_fn = jsc_value_new_function(
       ctx, "onMessage", G_CALLBACK(on_message_cb),
       NULL, NULL, JSC_TYPE_VALUE, 0);
     jsc_value_object_set_property(platform, "onMessage", on_message_fn);
+    g_object_unref(on_message_fn);
 
-
+    // disconnect() function
+    JSCValue *disconnect_fn = jsc_value_new_function(
+        ctx,
+        "disconnect",
+        G_CALLBACK(disconnect_cb),
+        NULL,
+        NULL,
+        JSC_TYPE_VALUE,
+        0
+    );
+    jsc_value_object_set_property(platform, "disconnect", disconnect_fn);
     // Define window.__wpe_firebolt_transport__ as non-writable, non-configurable
     jsc_value_object_define_property(
         global,
@@ -355,6 +404,7 @@ static void inject_wpe_firebolt_transport(JSCContext *ctx)
         JSC_VALUE_PROPERTY_VALUE,        platform,
         JSC_VALUE_PROPERTY_NONE
     );
+    g_object_unref(disconnect_fn);
 
 
     JSCValue* freeze = jsc_context_evaluate(
@@ -363,10 +413,7 @@ static void inject_wpe_firebolt_transport(JSCContext *ctx)
         -1
     );
     g_object_unref(freeze);
-    g_object_unref(connect_fn);
-    g_object_unref(on_conn_status_fn);
-    g_object_unref(send_fn);
-    g_object_unref(on_message_fn);
+    
     g_object_unref(platform);
     g_object_unref(global);
 }
