@@ -87,7 +87,7 @@ static JSCValue* create_result(JSCContext* ctx,
         jsc_value_object_set_property(
             result,
             "errorCode",
-            jsc_value_new_int32(ctx, errorCode)
+            jsc_value_new_number(ctx, errorCode)
         );
     }
 
