@@ -21,6 +21,9 @@
 
  #include <wpe/webkit-web-extension.h>
  #include "soupfunctions.h"
+ #include <functional>
+#include <string>
+
 
 
 class WebSocketClient
@@ -34,7 +37,7 @@ public:
     
     void SendMessage(const std::string& message);
 
-    bool Disconnect();
+    void Disconnect();
 
 private:
     char *m_url;

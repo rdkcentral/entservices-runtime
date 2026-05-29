@@ -170,7 +170,7 @@ static JSCValue* connect_cb(JSCContext* ctx,
             [ctx, page=static_cast<WebKitWebPage*>(user_data)](const std::string& message) {
                 auto* state = get_page_state(page);
                 if (state) {
-                    state->messageBus->emit(message);
+                    state->messageBus->emit(message.c_str());
                 }
             }
         );
@@ -261,20 +261,21 @@ static JSCValue* on_connection_status_cb(JSCContext* ctx,
         );
     
     // unsubscribe()
-    return jsc_value_new_function(
-        ctx,
-        "off",
-        G_CALLBACK(+[](JSCContext* ctx,
+    auto* unsubscribe_conn_fn = +[](JSCContext* ctx,
                        JSCValue*,
                        JSCValue*,
                        size_t,
                        const JSCValue**,
                        gpointer data) -> JSCValue*
-        {
-            auto* tuple = static_cast<std::pair<PageState*, guint>*>(data);
-            tuple->first->connectionBus->removeListener(tuple->second);
-            return create_result(ctx, true, 0);
-        }),
+    {
+        auto* tuple = static_cast<std::pair<PageState*, guint>*>(data);
+        tuple->first->connectionBus->removeListener(tuple->second);
+        return create_result(ctx, true, 0);
+    };
+    return jsc_value_new_function(
+        ctx,
+        "off",
+        G_CALLBACK(unsubscribe_conn_fn),
         new std::pair<PageState*, guint>(state, id),
         [](gpointer p) {
             delete static_cast<std::pair<PageState*, guint>*>(p);
@@ -313,20 +314,21 @@ static JSCValue* on_message_cb(JSCContext* ctx,
         );
     
     // unsubscribe()
-    return jsc_value_new_function(
-        ctx,
-        "off",
-        G_CALLBACK(+[](JSCContext* ctx,
+    auto* unsubscribe_msg_fn = +[](JSCContext* ctx,
                        JSCValue*,
                        JSCValue*,
                        size_t,
                        const JSCValue**,
                        gpointer data) -> JSCValue*
-        {
-            auto* tuple = static_cast<std::pair<PageState*, guint>*>(data);
-            tuple->first->messageBus->removeListener(tuple->second);
-            return create_result(ctx, true, 0);
-        }),
+    {
+        auto* tuple = static_cast<std::pair<PageState*, guint>*>(data);
+        tuple->first->messageBus->removeListener(tuple->second);
+        return create_result(ctx, true, 0);
+    };
+    return jsc_value_new_function(
+        ctx,
+        "off",
+        G_CALLBACK(unsubscribe_msg_fn),
         new std::pair<PageState*, guint>(state, id),
         [](gpointer p) {
             delete static_cast<std::pair<PageState*, guint>*>(p);
@@ -395,17 +397,9 @@ static void inject_wpe_firebolt_transport(JSCContext *ctx)
         0
     );
     jsc_value_object_set_property(platform, "disconnect", disconnect_fn);
-    // Define window.__wpe_firebolt_transport__ as non-writable, non-configurable
-    jsc_value_object_define_property(
-        global,
-        "__firebolt_transport__",
-        JSC_VALUE_PROPERTY_CONFIGURABLE, FALSE,
-        JSC_VALUE_PROPERTY_WRITABLE,     FALSE,
-        JSC_VALUE_PROPERTY_ENUMERABLE,   TRUE,
-        JSC_VALUE_PROPERTY_VALUE,        platform,
-        JSC_VALUE_PROPERTY_NONE
-    );
     g_object_unref(disconnect_fn);
+    // Set window.__firebolt_transport__ (frozen below via Object.freeze)
+    jsc_value_object_set_property(global, "__firebolt_transport__", platform);
 
 
     JSCValue* freeze = jsc_context_evaluate(
@@ -480,7 +474,7 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
         goto cleanup;
     }
 
-    result = jsc_context_evaluate(jsContext, js_source, js_len, fireboltUserScript);
+    result = jsc_context_evaluate(jsContext, js_source, static_cast<gssize>(js_len));
     if (!result) {
         g_warning("failed to evaluate the injected JS code");
         goto cleanup;
@@ -491,7 +485,11 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
     js_source = nullptr;
 
     // check if script injects window.FireboltServiceManager if not exit
-    serviceManager = jsc_value_object_get_property(jsContext, "FireboltServiceManager");
+    {
+        JSCValue *globalObj = jsc_context_get_global_object(jsContext);
+        serviceManager = jsc_value_object_get_property(globalObj, "FireboltServiceManager");
+        g_object_unref(globalObj);
+    }
     if (!serviceManager || !jsc_value_is_object(serviceManager)) {
         g_warning("failed to get the FireboltServiceManager object");
         goto cleanup;

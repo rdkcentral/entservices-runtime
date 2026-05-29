@@ -25,11 +25,6 @@ typedef struct _SoupMessage SoupMessage;
 typedef struct _SoupSession SoupSession;
 typedef struct _SoupWebsocketConnection SoupWebsocketConnection;
 
-typedef enum {
-    SOUP_WEBSOCKET_DATA_TEXT = 0x01,
-    SOUP_WEBSOCKET_DATA_BINARY = 0x02,
-} SoupWebsocketDataType;
-
 typedef SoupSession *(*soup_session_new_t)();
 
 typedef SoupMessage *(*soup_message_new_t)(const char *method,

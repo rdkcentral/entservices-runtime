@@ -18,7 +18,7 @@
  
  #include "websocketclient.h"
  #include <glib.h>
-
+ 
 static inline SoupFunctions& soup() {
     return SoupFunctions::get();
 }
