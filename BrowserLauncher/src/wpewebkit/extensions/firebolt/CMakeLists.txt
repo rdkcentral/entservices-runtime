@@ -20,6 +20,7 @@ add_library( WpeFireboltExtension
         wpefireboltextension.cpp
         asyncbus.cpp
         websocketclient.cpp
+        soupfunctions.cpp
         )
 
 target_compile_definitions( WpeFireboltExtension
