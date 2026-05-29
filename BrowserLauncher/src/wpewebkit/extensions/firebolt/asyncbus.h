@@ -40,8 +40,9 @@ public:
     // Safe from any thread
     void emit(const char* payload);
 
-private:
     void deliverOnJsThread(char* payload);
+
+private:
 
     std::mutex m_lock;
     std::unordered_map<guint, Listener> m_listeners;
