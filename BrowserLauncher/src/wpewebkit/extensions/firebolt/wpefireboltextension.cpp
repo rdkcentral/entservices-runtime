@@ -23,6 +23,7 @@
  #include <glib.h>
  #include "asyncbus.h"
  #include "websocketclient.h"
+ #include <memory>
 
 
 struct PageState {
@@ -443,11 +444,21 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
         return;
     }
 
-    GVariant* settings = (GVariant*) user_data;
+    GVariant* settings = (GVariant*) userData;
 
     gchar *fireboltEndpoint = nullptr;
     gchar *fireboltUserScript = nullptr;
-    
+    gchar *js_source = nullptr;
+    gsize js_len = 0;
+    JSCValue *result = nullptr;
+    JSCValue *serviceManager = nullptr;
+    JSCValue *serviceManagerCfg = nullptr;
+    char *clientId = nullptr;
+    JSCValue *configObject = nullptr;
+    JSCValue *cid = nullptr;
+    JSCValue *configureResult = nullptr;
+    PageState *state = nullptr;
+
     if (settings) {
         g_variant_lookup(settings, "fireboltEndpoint", "s", &fireboltEndpoint);
         g_variant_lookup(settings, "fireboltUserScript", "s", &fireboltUserScript);
@@ -463,65 +474,69 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
     
     // inject a javascript file into the page
     g_print("Injecting Firebolt bridge script from URL: %s\n", fireboltUserScript);
-    
-    
+
     if (!read_file_to_string(fireboltUserScript, &js_source, &js_len)) {
         g_warning("failed to read the injected JS code from file");
         goto cleanup;
     }
 
-    gchar* js_source = NULL;
-    gsize js_len = 0;
-    JSCValue* result = jsc_context_evaluate(jsContext, js_source, js_len, fireboltUserScript);
+    result = jsc_context_evaluate(jsContext, js_source, js_len, fireboltUserScript);
     if (!result) {
         g_warning("failed to evaluate the injected JS code");
         goto cleanup;
     }
     g_object_unref(result);
+    result = nullptr;
     g_free(js_source);
-    
+    js_source = nullptr;
 
     // check if script injects window.FireboltServiceManager if not exit
-    JSCValue* serviceManager = jsc_value_object_get_property(jsContext, "FireboltServiceManager");
+    serviceManager = jsc_value_object_get_property(jsContext, "FireboltServiceManager");
     if (!serviceManager || !jsc_value_is_object(serviceManager)) {
         g_warning("failed to get the FireboltServiceManager object");
         goto cleanup;
     }
     
     // check if FireboltServiceManager has a configure function, if not exit
-    JSCValue* serviceManagerCfg = jsc_value_object_get_property(serviceManager, "configure");
-    if (!serviceManagerCfg || ! jsc_value_is_function(serviceManagerCfg)) {
+    serviceManagerCfg = jsc_value_object_get_property(serviceManager, "configure");
+    if (!serviceManagerCfg || !jsc_value_is_function(serviceManagerCfg)) {
         g_warning("FireboltServiceManager.configure is not a function");
         goto cleanup;
     }
         
-    char *clientId = generate_client_id();
+    clientId = generate_client_id();
 
     // create config object to pass to the configure function, 
     // currently only contains the clientId, but can be extended in the future if needed
-    JSCValue* configObject = jsc_value_new_object(jsContext, nullptr, nullptr);
-    JSCValue* cid    = jsc_value_new_string(jsContext, clientId);
+    configObject = jsc_value_new_object(jsContext, nullptr, nullptr);
+    cid = jsc_value_new_string(jsContext, clientId);
     jsc_value_object_set_property(configObject, "clientId", cid);
     
     // call FireboltServiceManager.configure(configObject)
-    JSCValue* configureResult = jsc_value_function_call(serviceManagerCfg, JSC_TYPE_VALUE, &configObject,  G_TYPE_NONE);
+    configureResult = jsc_value_function_call(serviceManagerCfg, JSC_TYPE_VALUE, &configObject, G_TYPE_NONE);
     if (!configureResult) {
         g_warning("failed to call FireboltServiceManager.configure");
         goto cleanup;
     }
 
     g_object_unref(configureResult);
+    configureResult = nullptr;
     g_object_unref(cid);
+    cid = nullptr;
     g_object_unref(serviceManagerCfg);
+    serviceManagerCfg = nullptr;
     g_object_unref(serviceManager);
+    serviceManager = nullptr;
 
-    auto* state = new PageState();
+    state = new PageState();
     state->messageBus = std::make_unique<AsyncBus>(g_main_context_default());
     state->connectionBus = std::make_unique<AsyncBus>(g_main_context_default());
     state->clientId = clientId;
     g_free(clientId);
+    clientId = nullptr;
     state->fireboltEndpoint = fireboltEndpoint;
     g_free(fireboltEndpoint);
+    fireboltEndpoint = nullptr;
 
     state->connected = false;
 
@@ -536,8 +551,6 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
     
     inject_wpe_firebolt_transport(jsContext);
 
-    goto cleanup;
-    
     cleanup:
     if (jsContext) g_object_unref(jsContext);
     if (js_source) g_free(js_source);
