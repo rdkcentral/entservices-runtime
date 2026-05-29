@@ -490,7 +490,7 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
     
     // check if FireboltServiceManager has a configure function, if not exit
     JSCValue* serviceManagerCfg = jsc_value_object_get_property(serviceManager, "configure");
-    if (!serviceManagerCfg || ! jsc_value_is_function(serviceManagerCfg)) { {
+    if (!serviceManagerCfg || ! jsc_value_is_function(serviceManagerCfg)) {
         g_warning("FireboltServiceManager.configure is not a function");
         goto cleanup;
     }
