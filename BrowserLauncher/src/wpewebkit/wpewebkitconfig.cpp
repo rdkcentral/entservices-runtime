@@ -956,7 +956,7 @@ GVariantRef WpeWebKitConfig::fireboltExtensionSettings() const
                           g_variant_new_string(m_launchConfig->fireboltEndpoint().c_str()));
 
             // GET Firebolt User Script from static resources
-            const std::string fireboltUserScript = m_launchConfig->fireboltUserScript();
+            const std::string fireboltUserScript = fireboltInjectScript();
             if (!fireboltUserScript.empty()) {
                 g_variant_builder_add(&builder, "{sv}", "fireboltUserScript",
                               g_variant_new_string(fireboltUserScript.c_str()));

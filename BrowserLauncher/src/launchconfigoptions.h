@@ -51,7 +51,7 @@
     macro(bool, enableLifecycle2, {true}, "Enable page lifecycle.") \
     macro(bool, memoryMonitorUseContainerMode, {true}, "Enable memory monitor usage in container mode." ) \
     macro(bool, opportunisticSweepingAndGC, {true}, "Enable opportunistic sweeping and garbage collection.") \
-
+    
 //
 // configuration options set via envs or container environment
 //
