@@ -104,14 +104,69 @@
   var _VERSION = "9.0";
   
   var _typeSchemas = {
+    "Accessibility.ClosedCaptionsSettings": {"kind":"object","properties":{"enabled":{"kind":"primitive","type":"bool"},"preferredLanguages":{"kind":"optional","inner":{"kind":"array","items":{"kind":"primitive","type":"string"}}}},"required":["enabled"]},
     "Accessibility.VoiceGuidanceSettings": {"kind":"object","properties":{"enabled":{"kind":"primitive","type":"bool"},"rate":{"kind":"primitive","type":"number","constraints":{"minimum":0.1,"maximum":10}},"navigationHints":{"kind":"primitive","type":"bool"}},"required":["enabled","rate","navigationHints"]},
-    "Discovery.AgePolicy": {"kind":"enum","values":["app:adult","app:child","app:teen"]}
+    "Actions.IntentPayload": {"kind":"object","properties":{"intentId":{"kind":"primitive","type":"number"},"intent":{"kind":"primitive","type":"string"}},"required":["intentId","intent"]},
+    "Advertising.AdvertisingId": {"kind":"object","properties":{"ifa":{"kind":"primitive","type":"string"},"ifa_type":{"kind":"ref","name":"Advertising.IfaType"},"lmt":{"kind":"ref","name":"Advertising.Lmt"}},"required":["ifa","ifa_type","lmt"]},
+    "Advertising.IfaType": {"kind":"enum","values":["dpid","sspid","sessionid"]},
+    "Advertising.Lmt": {"kind":"enum","values":["0","1"]},
+    "Device.DeviceClass": {"kind":"enum","values":["ott","stb","tv"]},
+    "Device.HdrCapabilities": {"kind":"object","properties":{"hdr10":{"kind":"primitive","type":"bool"},"hdr10Plus":{"kind":"primitive","type":"bool"},"dolbyVision":{"kind":"primitive","type":"bool"},"hlg":{"kind":"primitive","type":"bool"}},"required":["hdr10","hdr10Plus","dolbyVision","hlg"]},
+    "Discovery.AgePolicy": {"kind":"enum","values":["app:adult","app:child","app:teen"]},
+    "Display.ColorimetryValue": {"kind":"enum","values":["SDR","HDR"]},
+    "Display.VideoResolution": {"kind":"enum","values":["1920x1080","3840x2160","7680x4320"]},
+    "Metrics.ErrorType": {"kind":"enum","values":["network","playback","entitlement","parse","aborted","unknown"]}
   };
   
   var _methodRegistry = {
+    "Accessibility.audioDescription": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"primitive","type":"bool"}},
+    "Accessibility.onAudioDescriptionChanged": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"primitive","type":"bool"}},
+    "Accessibility.closedCaptionsSettings": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"ref","name":"Accessibility.ClosedCaptionsSettings"}},
+    "Accessibility.onClosedCaptionsSettingsChanged": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"ref","name":"Accessibility.ClosedCaptionsSettings"}},
+    "Accessibility.highContrastUI": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"primitive","type":"bool"}},
+    "Accessibility.onHighContrastUIChanged": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"primitive","type":"bool"}},
     "Accessibility.voiceGuidanceSettings": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"ref","name":"Accessibility.VoiceGuidanceSettings"}},
+    "Accessibility.onVoiceGuidanceSettingsChanged": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"ref","name":"Accessibility.VoiceGuidanceSettings"}},
+    "Actions.start": {"kind":"call","paramsSchema":{"kind":"object","properties":{"intent":{"kind":"primitive","type":"string"},"handlerAppId":{"kind":"optional","inner":{"kind":"primitive","type":"string"}}},"required":["intent"]},"resultSchema":{"kind":"null"}},
+    "Actions.intent": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"ref","name":"Actions.IntentPayload"}},
+    "Actions.onIntent": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"ref","name":"Actions.IntentPayload"}},
+    "Advertising.advertisingId": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"ref","name":"Advertising.AdvertisingId"}},
+    "Device.uid": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"primitive","type":"string"}},
+    "Device.deviceClass": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"ref","name":"Device.DeviceClass"}},
+    "Device.hdr": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"ref","name":"Device.HdrCapabilities"}},
+    "Device.onHdrChanged": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"ref","name":"Device.HdrCapabilities"}},
+    "Device.dolbyAtmosExperienceAvailable": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"primitive","type":"bool"}},
+    "Device.onDolbyAtmosExperienceAvailableChanged": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"primitive","type":"bool"}},
     "Discovery.watched": {"kind":"call","paramsSchema":{"kind":"object","properties":{"entityId":{"kind":"primitive","type":"string"},"progress":{"kind":"optional","inner":{"kind":"primitive","type":"number"}},"completed":{"kind":"optional","inner":{"kind":"primitive","type":"bool"}},"watchedOn":{"kind":"optional","inner":{"kind":"primitive","type":"string"}},"agePolicy":{"kind":"optional","inner":{"kind":"ref","name":"Discovery.AgePolicy"}}},"required":["entityId"]},"resultSchema":{"kind":"null"}},
-    "Localization.onCountryChanged": {"kind":"subscribe","eventIsPrimitive":true,"eventSchema":{"kind":"primitive","type":"string","constraints":{"minLength":2,"maxLength":2,"pattern":"^[A-Z]{2}$"}}}
+    "Display.colorimetry": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"ref","name":"Display.ColorimetryValue"}},
+    "Display.videoResolutions": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"array","items":{"kind":"ref","name":"Display.VideoResolution"}}},
+    "Localization.country": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"primitive","type":"string","constraints":{"minLength":2,"maxLength":2,"pattern":"^[A-Z]{2}$"}}},
+    "Localization.onCountryChanged": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"primitive","type":"string","constraints":{"minLength":2,"maxLength":2,"pattern":"^[A-Z]{2}$"}}},
+    "Localization.preferredAudioLanguages": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"array","items":{"kind":"primitive","type":"string"}}},
+    "Localization.onPreferredAudioLanguagesChanged": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"array","items":{"kind":"primitive","type":"string"}}},
+    "Localization.presentationLanguage": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"primitive","type":"string"}},
+    "Localization.onPresentationLanguageChanged": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"primitive","type":"string"}},
+    "Metrics.ready": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"null"}},
+    "Metrics.startContent": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"null"}},
+    "Metrics.stopContent": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"null"}},
+    "Metrics.page": {"kind":"call","paramsSchema":{"kind":"object","properties":{"pageName":{"kind":"primitive","type":"string"}},"required":["pageName"]},"resultSchema":{"kind":"null"}},
+    "Metrics.error": {"kind":"call","paramsSchema":{"kind":"object","properties":{"errorType":{"kind":"ref","name":"Metrics.ErrorType"},"errorMessage":{"kind":"optional","inner":{"kind":"primitive","type":"string"}}},"required":["errorType"]},"resultSchema":{"kind":"null"}},
+    "Metrics.mediaLoadStart": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"null"}},
+    "Metrics.mediaPlay": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"null"}},
+    "Metrics.mediaPlaying": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"null"}},
+    "Metrics.mediaPause": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"null"}},
+    "Metrics.mediaWaiting": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"null"}},
+    "Metrics.mediaSeeking": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"null"}},
+    "Metrics.mediaSeeked": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"null"}},
+    "Metrics.mediaRateChanged": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"null"}},
+    "Metrics.mediaRenditionChanged": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"null"}},
+    "Metrics.mediaEnded": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"null"}},
+    "Metrics.event": {"kind":"call","paramsSchema":{"kind":"object","properties":{"eventName":{"kind":"primitive","type":"string"},"eventData":{"kind":"optional","inner":{"kind":"primitive","type":"string"}}},"required":["eventName"]},"resultSchema":{"kind":"null"}},
+    "Metrics.appInfo": {"kind":"call","paramsSchema":{"kind":"object","properties":{"agePolicy":{"kind":"optional","inner":{"kind":"ref","name":"Shared.AgePolicy"}}},"required":[]},"resultSchema":{"kind":"null"}},
+    "Network.connected": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"primitive","type":"bool"}},
+    "Network.onConnectedChanged": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"primitive","type":"bool"}},
+    "VideoOutput.resolution": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"ref","name":"VideoOutput.VideoResolution"}},
+    "VideoOutput.onResolutionChanged": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"ref","name":"VideoOutput.VideoResolution"}}
   };
   
   // --- End generated data ---
