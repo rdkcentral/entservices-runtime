@@ -61,6 +61,7 @@ public:
     }
 
     std::string loadFailureErrorPage() const;
+    std::string fireboltInjectScript() const;
 
     struct MemoryLimits
     {
