@@ -117,6 +117,7 @@ static JSCValue* connect_cb(JSCContext* ctx,
                 auto* state = get_page_state(page);
                 if (state) {
                     state->connected = success;
+                    g_print("WebSocket connection %s\n", success ? "successful" : "failed");
                     state->connectionBus->emit(success? "connected" : "disconnected");
                 }
             },
@@ -124,6 +125,7 @@ static JSCValue* connect_cb(JSCContext* ctx,
             [ctx, page=static_cast<WebKitWebPage*>(user_data)](const std::string& message) {
                 auto* state = get_page_state(page);
                 if (state) {
+                    g_print("Received message: %s\n", message.c_str());
                     state->messageBus->emit(message.c_str());
                 }
             }
@@ -159,7 +161,7 @@ static JSCValue* send_cb(JSCContext* ctx,
 {
     // Native implementation
     // params[] are JS arguments
-    g_print("send called\n");
+    
 
     if (n_params <1 || !jsc_value_is_string((JSCValue*)params[0])) {
         g_warning("send requires a message string parameter");
@@ -169,6 +171,7 @@ static JSCValue* send_cb(JSCContext* ctx,
     auto* state = get_page_state(static_cast<WebKitWebPage*>(user_data));
     if (state && state->connected && state->wsClient) {
         char* jsMessage = jsc_value_to_string((JSCValue*)params[0]);
+        g_print("send called with message: %s\n", jsMessage);
         if (jsMessage) {
             state->wsClient->SendMessage(jsMessage);
             g_free(jsMessage);

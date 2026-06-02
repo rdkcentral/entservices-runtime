@@ -176,7 +176,20 @@
   // ---------------------------------------------------------------------------
   function _onMessage(raw) {
     var message;
-    try { message = JSON.parse(raw); } catch (e) { return; }
+
+    // if raw is string, parse as JSON-RPC; otherwise ignore (could be non-JSON message from transport)
+    if (typeof raw === "string") {
+      console.log("Received message: " + raw);
+      try { 
+        message = JSON.parse(raw); 
+      } catch (e) {
+        console.log("Failed to parse message: " + raw);
+        return;
+      }
+    } else if (typeof raw === "object") {
+      console.log("Received non-string message: ", JSON.stringify(raw));
+      message = raw;
+    }
 
     // Has id → call response or subscribe ack
     if (message.id !== undefined) {
