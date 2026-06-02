@@ -940,39 +940,42 @@ GVariantRef WpeWebKitConfig::fireboltExtensionSettings() const
     GVariantBuilder builder;
     g_variant_builder_init(&builder, G_VARIANT_TYPE("a{sv}"));
 
-    // Diable wpeFireboltExtension by default
+    // Enable wpeFireboltExtension by default
     g_variant_builder_add(&builder, "{sv}", "wpeFireboltEnabled",
-                          g_variant_new_boolean(FALSE));
+                          g_variant_new_boolean(TRUE));
 
     // GET WPE_FIREBOLT_EXTENSION environment variable is enabled
     const char* fireboltExtensionEnv = g_getenv("WPE_FIREBOLT_EXTENSION");
     // check if fireboltExtensionEnv is set to true, if so then inject the firebolt endpoint into the extension settings so it can be used by the extension
 
-    if (fireboltExtensionEnv && fireboltExtensionEnv[0] && strcmp(fireboltExtensionEnv, "true") == 0)
+    if (fireboltExtensionEnv && fireboltExtensionEnv[0] && strcmp(fireboltExtensionEnv, "false") != 0)
     {
         if (!m_launchConfig->fireboltEndpoint().empty())
         {
             g_variant_builder_add(&builder, "{sv}", "fireboltEndpoint",
                           g_variant_new_string(m_launchConfig->fireboltEndpoint().c_str()));
 
-            // GET FIREBOLT_USER_SCRIPT environment variable
-            const char* fireboltUserScriptEnv = g_getenv("FIREBOLT_USER_SCRIPT");
-            if (fireboltUserScriptEnv && fireboltUserScriptEnv[0]) {
+            // GET Firebolt User Script from static resources
+            const std::string fireboltUserScript = m_launchConfig->fireboltUserScript();
+            if (!fireboltUserScript.empty()) {
                 g_variant_builder_add(&builder, "{sv}", "fireboltUserScript",
-                              g_variant_new_string(fireboltUserScriptEnv));
-                
-                g_variant_builder_add(&builder, "{sv}", "wpeFireboltEnabled",
-                          g_variant_new_boolean(TRUE));
+                              g_variant_new_string(fireboltUserScript.c_str()));
             }
             else {
-                g_warning("FIREBOLT_USER_SCRIPT environment variable is not set, firebolt extension will be disabled");
+                g_warning("FIREBOLT_USER_SCRIPT is not set, firebolt extension will be disabled");
+                 g_variant_builder_add(&builder, "{sv}", "wpeFireboltEnabled",
+                          g_variant_new_boolean(FALSE));
             }
         } else {
             g_warning("WPE_FIREBOLT_EXTENSION environment variable is set to true but firebolt endpoint is not set, firebolt extension will be disabled");
+            g_variant_builder_add(&builder, "{sv}", "wpeFireboltEnabled",
+                          g_variant_new_boolean(FALSE));
         }
         
     } else {
         g_warning("WPE_FIREBOLT_EXTENSION environment variable is not set to true, firebolt extension will be disabled");
+        g_variant_builder_add(&builder, "{sv}", "wpeFireboltEnabled",
+                      g_variant_new_boolean(FALSE));
     }
 
     return GVariantRef { g_variant_builder_end(&builder) };
@@ -1030,4 +1033,32 @@ std::string WpeWebKitConfig::loadFailureErrorPage() const
     }
 
     return "<html><body>Error</body></html>";
+}
+
+/*!
+    Returns the firebolt-inject.js as a string content to be injected by the
+    WPE Browser extension. 
+    This should only be used if wpeFireboltExtensionEnabled() returns true.
+ */
+
+std::string WpeWebKitConfig::fireboltInjectScript() const
+{
+    GError *error = nullptr;
+    GBytes *bytes = g_resources_lookup_data("/org/rdk/browser/extensions/firebolt-inject.js", G_RESOURCE_LOOKUP_FLAGS_NONE, &error);
+    if (bytes)
+    {
+        gsize sz;
+        const void *ptr = g_bytes_get_data(bytes, &sz);
+        if (ptr && sz)        {
+            std::string result(reinterpret_cast<const char*>(ptr), sz);
+            g_bytes_unref(bytes);
+            return result;
+        }
+    }
+    else if (error)
+    {
+        g_warning("failed to load firebolt inject script from resources, %s", error->message);
+        g_error_free(error); error = nullptr;
+    }
+    return "";
 }

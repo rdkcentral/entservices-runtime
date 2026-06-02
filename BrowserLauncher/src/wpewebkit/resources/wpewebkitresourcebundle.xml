@@ -3,4 +3,7 @@
   <gresource prefix="/org/rdk/browser">
     <file compressed="true" alias="error.html">error.html</file>
   </gresource>
+  <gresource prefix="/org/rdk/browser/extensions">
+    <file compressed="true" alias="firebolt-inject.js">firebolt-inject.js</file>
+  </gresource>
 </gresources>
