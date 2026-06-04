@@ -365,6 +365,7 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx)
         g_object_unref(serviceManagerTransport);
         return false;
     } else {
+        gprint("Firebolt transport injected successfully\n");
         g_object_unref(serviceManagerTransportResult);
     }
     
@@ -389,9 +390,11 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
                                   WebKitFrame *frame,
                                   gpointer userData)
 {
+    gprint("onWindowObjectCleared called for frame\n");
     // We only want to inject our JS code into the main frame, not into iframes
     if (webkit_frame_is_main_frame(frame) == FALSE)
         return;
+    gprint("onWindowObjectCleared is injecting into main frame\n");
 
     JSCContext *jsContext = webkit_frame_get_js_context_for_script_world(frame, world);
     if (!jsContext)
@@ -413,6 +416,9 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
         g_variant_lookup(settings, "fireboltEndpoint", "s", &fireboltEndpoint);
         g_variant_lookup(settings, "fireboltUserScript", "s", &fireboltUserScript);
         g_variant_unref(settings); // Unref the settings after using it
+    } else {
+        g_warning("no settings found for firebolt extension");
+        goto cleanup;
     }
 
     if (!fireboltUserScript || (strlen(fireboltUserScript) == 0))
@@ -457,8 +463,6 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
             }
         );
     
-    inject_wpe_firebolt_transport(jsContext);
-
     cleanup:
     if (jsContext) g_object_unref(jsContext);
     if (js_source) g_free(js_source);
@@ -480,6 +484,7 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
     G_MODULE_EXPORT void webkit_web_extension_initialize_with_user_data(WebKitWebExtension *extension,
                                                                         GVariant *userData)
     {
+        g_print("Initializing WPE Firebolt Extension\n");
         gboolean enabled = FALSE;
         gchar *fireboltEndpoint = nullptr;
         gchar *fireboltUserScript = nullptr;
@@ -487,26 +492,33 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
         GVariant *settings = g_variant_lookup_value(userData, "firebolt", G_VARIANT_TYPE_VARDICT);
 
         if (settings) {
+            g_print("Firebolt extension settings found\n");
             g_variant_lookup(settings, "wpeFireboltEnabled", "b", &enabled);
             if (enabled) {
                 g_variant_lookup(settings, "fireboltEndpoint", "s", &fireboltEndpoint);
                 g_variant_lookup(settings, "fireboltUserScript", "s", &fireboltUserScript);
+
+                if (fireboltEndpoint && fireboltUserScript) {
+                    g_variant_ref(settings); // Ref the settings so we can pass it to the callback
+                    g_print("WPE Firebolt Extension enabled with Firebolt Endpoint: %s\n", fireboltEndpoint);
+                    // Here you would initialize your extension's functionality, e.g., set up IPC, hooks, etc.
+                    // hook the following signal, so we can inject JS code into the page
+                    g_signal_connect(webkit_script_world_get_default(),
+                                    "window-object-cleared",
+                                    G_CALLBACK(onWindowObjectCleared),
+                                    settings);
+                    g_variant_unref(settings); // Unref the settings after connecting the signal
+
+                } else {
+                    if (!fireboltEndpoint) g_print("WPE Firebolt Extension enabled but no Firebolt Endpoint set.\n");
+                    if (!fireboltUserScript) g_print("WPE Firebolt Extension enabled but no injected script URL set.\n");
+                }
+
+                if (fireboltEndpoint) g_free(fireboltEndpoint);
+                if (fireboltUserScript) g_free(fireboltUserScript);
             }
-        }
-
-        if (enabled && fireboltEndpoint && fireboltUserScript) {
-            g_variant_ref(settings); // Ref the settings so we can pass it to the callback
-            g_print("WPE Firebolt Extension enabled with Firebolt Endpoint: %s\n", fireboltEndpoint);
-            // Here you would initialize your extension's functionality, e.g., set up IPC, hooks, etc.
-            // hook the following signal, so we can inject JS code into the page
-            g_signal_connect(webkit_script_world_get_default(),
-                             "window-object-cleared",
-                             G_CALLBACK(onWindowObjectCleared),
-                             settings);
-            g_variant_unref(settings); // Unref the settings after connecting the signal
-
         } else {
-            g_print("WPE Firebolt Extension is disabled or missing configuration.\n");
+            g_print("No firebolt extension settings found, extension will be disabled\n");
         }
     }
 }

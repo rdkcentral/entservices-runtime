@@ -946,10 +946,14 @@ GVariantRef WpeWebKitConfig::fireboltExtensionSettings() const
 
     // GET WPE_FIREBOLT_EXTENSION environment variable is enabled
     const char* fireboltExtensionEnv = g_getenv("WPE_FIREBOLT_EXTENSION");
-    // check if fireboltExtensionEnv is set to true, if so then inject the firebolt endpoint into the extension settings so it can be used by the extension
+    // check if fireboltExtensionEnv is set to false, if not then inject the firebolt endpoint into the extension settings so it can be used by the extension
 
-    if (fireboltExtensionEnv && fireboltExtensionEnv[0] && strcmp(fireboltExtensionEnv, "false") != 0)
+    if (fireboltExtensionEnv && fireboltExtensionEnv[0] && strcmp(fireboltExtensionEnv, "false") == 0)
     {
+        g_warning("WPE_FIREBOLT_EXTENSION environment variable is not set to true, firebolt extension will be disabled");
+        g_variant_builder_add(&builder, "{sv}", "wpeFireboltEnabled",
+                      g_variant_new_boolean(FALSE));
+    } else {
         if (!m_launchConfig->fireboltEndpoint().empty())
         {
             g_variant_builder_add(&builder, "{sv}", "fireboltEndpoint",
@@ -971,11 +975,7 @@ GVariantRef WpeWebKitConfig::fireboltExtensionSettings() const
             g_variant_builder_add(&builder, "{sv}", "wpeFireboltEnabled",
                           g_variant_new_boolean(FALSE));
         }
-        
-    } else {
-        g_warning("WPE_FIREBOLT_EXTENSION environment variable is not set to true, firebolt extension will be disabled");
-        g_variant_builder_add(&builder, "{sv}", "wpeFireboltEnabled",
-                      g_variant_new_boolean(FALSE));
+                      
     }
 
     return GVariantRef { g_variant_builder_end(&builder) };
@@ -1044,15 +1044,21 @@ std::string WpeWebKitConfig::loadFailureErrorPage() const
 std::string WpeWebKitConfig::fireboltInjectScript() const
 {
     GError *error = nullptr;
+    gprintf("loading firebolt inject script from resources\n");
     GBytes *bytes = g_resources_lookup_data("/org/rdk/browser/extensions/firebolt-inject.js", G_RESOURCE_LOOKUP_FLAGS_NONE, &error);
+    gprintf("finished loading firebolt inject script from resources\n");
     if (bytes)
     {
         gsize sz;
         const void *ptr = g_bytes_get_data(bytes, &sz);
         if (ptr && sz)        {
             std::string result(reinterpret_cast<const char*>(ptr), sz);
+            gprintf("finished reading firebolt inject script data\n");
             g_bytes_unref(bytes);
             return result;
+        } else {
+            g_bytes_unref(bytes);
+            g_warning("failed to read firebolt inject script data from resources");
         }
     }
     else if (error)
