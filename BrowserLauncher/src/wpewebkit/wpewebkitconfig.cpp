@@ -139,13 +139,15 @@ bool WpeWebKitConfig::initExtensionDir()
 
     // default extensions, always loaded
     std::set<std::string> extensions {
-        "libWindowMinimizeExtension.so"
+        "libWindowMinimizeExtension.so",
+        "libWpeFireboltExtension.so",
     };
 
     // extensions loaded based on config
     if (m_launchConfig->enableConsoleLog())
         extensions.insert("libLogExtension.so");
 
+    g_print("runtime dir: %s\n", m_launchConfig->runtimeDir().c_str());
     std::string extDirectory = m_launchConfig->runtimeDir() + "/wpewebkit/extensions";
 
     // symlink the extensions
