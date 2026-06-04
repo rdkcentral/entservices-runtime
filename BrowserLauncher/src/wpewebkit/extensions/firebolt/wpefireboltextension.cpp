@@ -365,7 +365,7 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx)
         g_object_unref(serviceManagerTransport);
         return false;
     } else {
-        gprint("Firebolt transport injected successfully\n");
+        g_print("Firebolt transport injected successfully\n");
         g_object_unref(serviceManagerTransportResult);
     }
     
@@ -390,11 +390,11 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
                                   WebKitFrame *frame,
                                   gpointer userData)
 {
-    gprint("onWindowObjectCleared called for frame\n");
+    g_print("onWindowObjectCleared called for frame\n");
     // We only want to inject our JS code into the main frame, not into iframes
     if (webkit_frame_is_main_frame(frame) == FALSE)
         return;
-    gprint("onWindowObjectCleared is injecting into main frame\n");
+    g_print("onWindowObjectCleared is injecting into main frame\n");
 
     JSCContext *jsContext = webkit_frame_get_js_context_for_script_world(frame, world);
     if (!jsContext)

@@ -1044,9 +1044,9 @@ std::string WpeWebKitConfig::loadFailureErrorPage() const
 std::string WpeWebKitConfig::fireboltInjectScript() const
 {
     GError *error = nullptr;
-    gprintf("loading firebolt inject script from resources\n");
+    g_print("loading firebolt inject script from resources\n");
     GBytes *bytes = g_resources_lookup_data("/org/rdk/browser/extensions/firebolt-inject.js", G_RESOURCE_LOOKUP_FLAGS_NONE, &error);
-    gprintf("finished loading firebolt inject script from resources\n");
+    g_print("finished loading firebolt inject script from resources\n");
     if (bytes)
     {
         gsize sz;
