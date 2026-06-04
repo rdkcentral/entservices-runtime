@@ -1053,7 +1053,7 @@ std::string WpeWebKitConfig::fireboltInjectScript() const
         const void *ptr = g_bytes_get_data(bytes, &sz);
         if (ptr && sz)        {
             std::string result(reinterpret_cast<const char*>(ptr), sz);
-            gprintf("finished reading firebolt inject script data\n");
+            g_print("finished reading firebolt inject script data\n");
             g_bytes_unref(bytes);
             return result;
         } else {
