@@ -359,21 +359,20 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx)
     g_object_unref(disconnect_fn);
 
 
+    bool finalResult = false;
     JSCValue *serviceManagerTransportResult = jsc_value_function_call(serviceManagerTransport, JSC_TYPE_VALUE, &platform, G_TYPE_NONE);
     if (!serviceManagerTransportResult) {
         g_warning("failed to call FireboltServiceManager.configure");
-        g_object_unref(serviceManagerTransport);
-        return false;
     } else {
         g_print("Firebolt transport injected successfully\n");
         g_object_unref(serviceManagerTransportResult);
+        finalResult = true;
     }
-    
-    g_object_unref(serviceManagerTransport);
-    g_object_unref(platform);
-    g_object_unref(global);
 
-    return true;
+    if (serviceManagerTransport) g_object_unref(serviceManagerTransport);
+    if (platform) g_object_unref(platform);
+
+    return finalResult;
 }
 
 
