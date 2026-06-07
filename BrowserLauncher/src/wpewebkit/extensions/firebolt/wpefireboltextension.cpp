@@ -30,17 +30,24 @@
 
 struct PageState {
     static constexpr uint32_t MAGIC = 0xDEADBEEF;
+    static uint64_t next_id;
     
+    uint64_t id;
     uint32_t magic = MAGIC;
     std::unique_ptr<AsyncBus> messageBus;
     std::unique_ptr<AsyncBus> connectionBus;
     std::string fireboltEndpoint;
     bool connected = false;
     std::unique_ptr<WebSocketClient> wsClient;
+    
+    PageState() : id(next_id++) { }
 };
 
-// Static map to store page states indexed by page pointer address
-static std::map<uintptr_t, std::shared_ptr<PageState>> g_page_states;
+// Initialize static counter
+uint64_t PageState::next_id = 1;
+
+// Static map to store page states indexed by unique stable ID
+static std::map<uint64_t, std::shared_ptr<PageState>> g_page_states;
 static std::mutex g_page_states_mutex;
 
 
@@ -69,34 +76,32 @@ const char* INVALID_STATE_ERROR = "Invalid PageState pointer (magic number misma
 
 static std::shared_ptr<PageState> validate_page_state(gpointer user_data)
 {
-    g_print("validate_page_state: checking user_data pointer\n");
+    g_print("validate_page_state: checking user_data\n");
     
     if (!user_data) {
         g_warning("validate_page_state: user_data is null");
         return nullptr;
     }
     
-    g_print("validate_page_state: casting to WebKitWebPage\n");
-    auto page = static_cast<WebKitWebPage*>(user_data);
-    auto page_addr = reinterpret_cast<uintptr_t>(page);
+    // user_data now contains the unique page state ID, not a pointer
+    auto state_id = reinterpret_cast<uintptr_t>(user_data);
+    g_print("validate_page_state: looking up state with ID %lu in map\n", state_id);
     
-    g_print("validate_page_state: looking up page %p (addr: %lx) in map\n", page, page_addr);
     std::lock_guard<std::mutex> lock(g_page_states_mutex);
     
-    // Debug: print all entries in map
-    if (g_page_states.empty()) {
-        g_warning("validate_page_state: map is empty!");
-    } else {
-        g_print("validate_page_state: map contains %zu entries:\n", g_page_states.size());
-        for (auto& entry : g_page_states) {
-            g_print("  - page addr: %lx\n", entry.first);
-        }
-    }
-    
-    auto it = g_page_states.find(page_addr);
+    auto it = g_page_states.find(state_id);
     
     if (it == g_page_states.end()) {
-        g_warning("validate_page_state: page state not found in map for addr %lx", page_addr);
+        g_warning("validate_page_state: page state not found in map for ID %lu", state_id);
+        // Debug: print all entries in map
+        if (g_page_states.empty()) {
+            g_warning("validate_page_state: map is empty!");
+        } else {
+            g_print("validate_page_state: map contains %zu entries with IDs:\n", g_page_states.size());
+            for (auto& entry : g_page_states) {
+                g_print("  - state ID: %lu\n", entry.first);
+            }
+        }
         return nullptr;
     }
     
@@ -107,7 +112,7 @@ static std::shared_ptr<PageState> validate_page_state(gpointer user_data)
         return nullptr;
     }
     
-    g_print("validate_page_state: validation successful\n");
+    g_print("validate_page_state: validation successful for state ID %lu\n", state_id);
     return shared_state;
 }
 constexpr int INVALID_PARAMETERS = 1002;
@@ -403,12 +408,15 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx, WebKitWebPage* page, 
     // Create platform object
     JSCValue *platform = jsc_value_new_object(ctx, NULL, NULL);
 
-    // Create connect() function - pass page pointer as user_data
+    // Convert state ID to gpointer for passing as user_data
+    auto state_id_ptr = reinterpret_cast<gpointer>(state->id);
+
+    // Create connect() function - pass state ID as user_data
     JSCValue *connect_fn = jsc_value_new_function(
         ctx,
         "connect",
         G_CALLBACK(connect_cb),
-        page,
+        state_id_ptr,
         nullptr,  // No destructor needed since we're not allocating
         JSC_TYPE_VALUE,
         0
@@ -416,10 +424,10 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx, WebKitWebPage* page, 
     jsc_value_object_set_property(platform, "connect", connect_fn);
     g_object_unref(connect_fn);
 
-    // onConnectionStatus() - pass page pointer as user_data
+    // onConnectionStatus() - pass state ID as user_data
     JSCValue *on_conn_status_fn = jsc_value_new_function(
       ctx, "onConnectionStatus", G_CALLBACK(on_connection_status_cb),
-      page,
+      state_id_ptr,
       nullptr,
       JSC_TYPE_VALUE, 0);
     jsc_value_object_set_property(platform, "onConnectionStatus", on_conn_status_fn);
@@ -430,7 +438,7 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx, WebKitWebPage* page, 
         ctx,
         "send",
         G_CALLBACK(send_cb),
-        page,
+        state_id_ptr,
         nullptr,
         JSC_TYPE_VALUE,
         0
@@ -438,21 +446,21 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx, WebKitWebPage* page, 
     jsc_value_object_set_property(platform, "send", send_fn);
     g_object_unref(send_fn);
 
-    // onMessage() - pass page pointer as user_data
+    // onMessage() - pass state ID as user_data
     JSCValue *on_message_fn = jsc_value_new_function(
       ctx, "onMessage", G_CALLBACK(on_message_cb),
-      page,
+      state_id_ptr,
       nullptr,
       JSC_TYPE_VALUE, 0);
     jsc_value_object_set_property(platform, "onMessage", on_message_fn);
     g_object_unref(on_message_fn);
 
-    // disconnect() function - pass page pointer as user_data
+    // disconnect() function - pass state ID as user_data
     JSCValue *disconnect_fn = jsc_value_new_function(
         ctx,
         "disconnect",
         G_CALLBACK(disconnect_cb),
-        page,
+        state_id_ptr,
         nullptr,
         JSC_TYPE_VALUE,
         0
@@ -551,27 +559,27 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
 
     // Scope block to avoid 'goto cleanup' crossing initialization
     {
-        // Store state in map indexed by page pointer
-        auto page_addr = reinterpret_cast<uintptr_t>(page);
+        // Store state in map indexed by stable unique ID
+        auto state_id = state->id;
         {
             std::lock_guard<std::mutex> lock(g_page_states_mutex);
-            g_page_states[page_addr] = state;
-            g_print("Stored page state in map for page %p (addr: %lx)\n", page, page_addr);
+            g_page_states[state_id] = state;
+            g_print("Stored page state in map with ID %lu\n", state_id);
         }
 
         // Register a cleanup callback when the page is destroyed
         g_object_set_data_full(
             G_OBJECT(page),
-            "firebolt-page-addr",
-            new uintptr_t(page_addr),
+            "firebolt-state-id",
+            new uint64_t(state_id),
             [](gpointer data) {
-                auto addr = static_cast<uintptr_t*>(data);
+                auto id = static_cast<uint64_t*>(data);
                 {
                     std::lock_guard<std::mutex> lock(g_page_states_mutex);
-                    g_print("Cleaning up page state for page %p from map\n", reinterpret_cast<void*>(*addr));
-                    g_page_states.erase(*addr);
+                    g_print("Cleaning up page state with ID %lu from map\n", *id);
+                    g_page_states.erase(*id);
                 }
-                delete addr;
+                delete id;
             }
         );
 
