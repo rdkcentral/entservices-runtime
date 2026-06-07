@@ -83,25 +83,29 @@ static std::shared_ptr<PageState> validate_page_state(gpointer user_data)
         return nullptr;
     }
     
-    // user_data now contains the unique page state ID, not a pointer
-    auto state_id = reinterpret_cast<uintptr_t>(user_data);
-    g_print("validate_page_state: looking up state with ID %zu in map\n", state_id);
+    // user_data contains the page pointer
+    auto page = static_cast<WebKitWebPage*>(user_data);
+    g_print("validate_page_state: page pointer = %p\n", page);
     
+    // Retrieve the state ID from the page object
+    auto state_id_ptr = static_cast<uint64_t*>(
+        g_object_get_data(G_OBJECT(page), "firebolt-state-id")
+    );
+    
+    if (!state_id_ptr) {
+        g_warning("validate_page_state: state ID not found in page object data");
+        return nullptr;
+    }
+    
+    auto state_id = *state_id_ptr;
+    g_print("validate_page_state: retrieved state ID %lu from page object\n", state_id);
+    
+    // Now look up the state using the retrieved ID
     std::lock_guard<std::mutex> lock(g_page_states_mutex);
-    
     auto it = g_page_states.find(state_id);
     
     if (it == g_page_states.end()) {
-        g_warning("validate_page_state: page state not found in map for ID %zu", state_id);
-        // Debug: print all entries in map
-        if (g_page_states.empty()) {
-            g_warning("validate_page_state: map is empty!");
-        } else {
-            g_print("validate_page_state: map contains %zu entries with IDs:\n", g_page_states.size());
-            for (auto& entry : g_page_states) {
-                g_print("  - state ID: %lu\n", entry.first);
-            }
-        }
+        g_warning("validate_page_state: page state not found in map for ID %lu", state_id);
         return nullptr;
     }
     
@@ -112,7 +116,7 @@ static std::shared_ptr<PageState> validate_page_state(gpointer user_data)
         return nullptr;
     }
     
-    g_print("validate_page_state: validation successful for state ID %zu\n", state_id);
+    g_print("validate_page_state: validation successful for state ID %lu\n", state_id);
     return shared_state;
 }
 constexpr int INVALID_PARAMETERS = 1002;
@@ -408,15 +412,15 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx, WebKitWebPage* page, 
     // Create platform object
     JSCValue *platform = jsc_value_new_object(ctx, NULL, NULL);
 
-    // Convert state ID to gpointer for passing as user_data
-    auto state_id_ptr = reinterpret_cast<gpointer>(state->id);
+    // Pass page pointer as user_data (state ID will be retrieved from page object)
+    auto page_ptr = reinterpret_cast<gpointer>(page);
 
-    // Create connect() function - pass state ID as user_data
+    // Create connect() function - pass page pointer as user_data
     JSCValue *connect_fn = jsc_value_new_function(
         ctx,
         "connect",
         G_CALLBACK(connect_cb),
-        state_id_ptr,
+        page_ptr,
         nullptr,  // No destructor needed since we're not allocating
         JSC_TYPE_VALUE,
         0
@@ -424,10 +428,10 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx, WebKitWebPage* page, 
     jsc_value_object_set_property(platform, "connect", connect_fn);
     g_object_unref(connect_fn);
 
-    // onConnectionStatus() - pass state ID as user_data
+    // onConnectionStatus() - pass page pointer as user_data
     JSCValue *on_conn_status_fn = jsc_value_new_function(
       ctx, "onConnectionStatus", G_CALLBACK(on_connection_status_cb),
-      state_id_ptr,
+      page_ptr,
       nullptr,
       JSC_TYPE_VALUE, 0);
     jsc_value_object_set_property(platform, "onConnectionStatus", on_conn_status_fn);
@@ -438,7 +442,7 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx, WebKitWebPage* page, 
         ctx,
         "send",
         G_CALLBACK(send_cb),
-        state_id_ptr,
+        page_ptr,
         nullptr,
         JSC_TYPE_VALUE,
         0
@@ -446,21 +450,21 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx, WebKitWebPage* page, 
     jsc_value_object_set_property(platform, "send", send_fn);
     g_object_unref(send_fn);
 
-    // onMessage() - pass state ID as user_data
+    // onMessage() - pass page pointer as user_data
     JSCValue *on_message_fn = jsc_value_new_function(
       ctx, "onMessage", G_CALLBACK(on_message_cb),
-      state_id_ptr,
+      page_ptr,
       nullptr,
       JSC_TYPE_VALUE, 0);
     jsc_value_object_set_property(platform, "onMessage", on_message_fn);
     g_object_unref(on_message_fn);
 
-    // disconnect() function - pass state ID as user_data
+    // disconnect() function - pass page pointer as user_data
     JSCValue *disconnect_fn = jsc_value_new_function(
         ctx,
         "disconnect",
         G_CALLBACK(disconnect_cb),
-        state_id_ptr,
+        page_ptr,
         nullptr,
         JSC_TYPE_VALUE,
         0
@@ -567,10 +571,18 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
             g_print("Stored page state in map with ID %lu\n", state_id);
         }
 
+        // Store the state ID on the page object so callbacks can retrieve it
+        g_object_set_data(
+            G_OBJECT(page),
+            "firebolt-state-id",
+            new uint64_t(state_id)
+        );
+        g_print("Stored state ID %lu on page object\n", state_id);
+
         // Register a cleanup callback when the page is destroyed
         g_object_set_data_full(
             G_OBJECT(page),
-            "firebolt-state-id",
+            "firebolt-state-cleanup",
             new uint64_t(state_id),
             [](gpointer data) {
                 auto id = static_cast<uint64_t*>(data);
