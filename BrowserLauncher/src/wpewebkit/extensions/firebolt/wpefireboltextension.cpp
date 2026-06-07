@@ -69,15 +69,17 @@ static PageState* get_page_state(WebKitWebPage* page)
 constexpr int PAGE_STATE_UNAVAILABLE = 1001;
 const char* INVALID_STATE_ERROR = "Invalid PageState pointer (magic number mismatch)";
 
-static PageState* validate_page_state(gpointer user_data)
+static std::shared_ptr<PageState> validate_page_state(gpointer user_data)
 {
     if (!user_data) {
         g_warning("PageState pointer is null");
         return nullptr;
     }
     
-    auto* state = static_cast<PageState*>(user_data);
-    if (state->magic != PageState::MAGIC) {
+    auto* state_ptr = static_cast<std::shared_ptr<PageState>*>(user_data);
+    auto state = *state_ptr;  // Dereference to get the actual shared_ptr
+    
+    if (!state || state->magic != PageState::MAGIC) {
         g_warning("%s", INVALID_STATE_ERROR);
         return nullptr;
     }
@@ -123,7 +125,7 @@ static JSCValue* connect_cb(JSCContext* ctx,
     // params[] are JS arguments
     g_print("connect called\n");
 
-    auto* state = validate_page_state(user_data);
+    auto state = validate_page_state(user_data);
     if (!state) {
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
@@ -138,20 +140,22 @@ static JSCValue* connect_cb(JSCContext* ctx,
         g_print("WebSocket client created, attempting to connect...\n");
         state->connected = state->wsClient->Connect(
             // onConnect callback
-            [ctx, page=static_cast<WebKitWebPage*>(user_data)](const bool success) {
-                auto* state = get_page_state(page);
-                if (state) {
+            [ctx, state](const bool success) {
+                if (state && state->magic == PageState::MAGIC) {
                     state->connected = success;
                     g_print("WebSocket connection %s\n", success ? "successful" : "failed");
                     state->connectionBus->emit(success? "connected" : "disconnected");
+                } else {
+                    g_warning("onConnect: invalid state object");
                 }
             },
             // onMessage callback
-            [ctx, page=static_cast<WebKitWebPage*>(user_data)](const std::string& message) {
-                auto* state = get_page_state(page);
-                if (state) {
+            [ctx, state](const std::string& message) {
+                if (state && state->magic == PageState::MAGIC) {
                     g_print("Received message: %s\n", message.c_str());
                     state->messageBus->emit(message.c_str());
+                } else {
+                    g_warning("onMessage: invalid state object");
                 }
             }
         );
@@ -169,7 +173,7 @@ static JSCValue* disconnect_cb(JSCContext* ctx,
         gpointer user_data)
 {
     g_print("disconnect called\n");
-    auto* state = validate_page_state(user_data);
+    auto state = validate_page_state(user_data);
     if (!state) {
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
@@ -199,7 +203,7 @@ static JSCValue* send_cb(JSCContext* ctx,
     }
     g_print("send parameter is valid\n");
 
-    auto* state = validate_page_state(user_data);
+    auto state = validate_page_state(user_data);
     if (!state) {
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
@@ -229,7 +233,7 @@ static JSCValue* on_connection_status_cb(JSCContext* ctx,
               gpointer user_data)
 {
     g_print("onConnectionStatus callback called\n");
-    auto* state = validate_page_state(user_data);
+    auto state = validate_page_state(user_data);
     if (!state) {
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
@@ -251,7 +255,7 @@ static JSCValue* on_connection_status_cb(JSCContext* ctx,
                        const JSCValue**,
                        gpointer data) -> JSCValue*
     {
-        auto* tuple = static_cast<std::pair<PageState*, guint>*>(data);
+        auto* tuple = static_cast<std::pair<std::shared_ptr<PageState>, guint>*>(data);
         tuple->first->connectionBus->removeListener(tuple->second);
         return create_result(ctx, true, 0);
     };
@@ -259,9 +263,9 @@ static JSCValue* on_connection_status_cb(JSCContext* ctx,
         ctx,
         "off",
         G_CALLBACK(unsubscribe_conn_fn),
-        new std::pair<PageState*, guint>(state, id),
+        new std::pair<std::shared_ptr<PageState>, guint>(state, id),
         [](gpointer p) {
-            delete static_cast<std::pair<PageState*, guint>*>(p);
+            delete static_cast<std::pair<std::shared_ptr<PageState>, guint>*>(p);
         },
         JSC_TYPE_VALUE,
         0
@@ -277,7 +281,7 @@ static JSCValue* on_message_cb(JSCContext* ctx,
               gpointer user_data)
 {
     g_print("onMessage callback called\n");
-    auto* state = validate_page_state(user_data);
+    auto state = validate_page_state(user_data);
     if (!state) {
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
@@ -300,7 +304,7 @@ static JSCValue* on_message_cb(JSCContext* ctx,
                        const JSCValue**,
                        gpointer data) -> JSCValue*
     {
-        auto* tuple = static_cast<std::pair<PageState*, guint>*>(data);
+        auto* tuple = static_cast<std::pair<std::shared_ptr<PageState>, guint>*>(data);
         tuple->first->messageBus->removeListener(tuple->second);
         return create_result(ctx, true, 0);
     };
@@ -308,9 +312,9 @@ static JSCValue* on_message_cb(JSCContext* ctx,
         ctx,
         "off",
         G_CALLBACK(unsubscribe_msg_fn),
-        new std::pair<PageState*, guint>(state, id),
+        new std::pair<std::shared_ptr<PageState>, guint>(state, id),
         [](gpointer p) {
-            delete static_cast<std::pair<PageState*, guint>*>(p);
+            delete static_cast<std::pair<std::shared_ptr<PageState>, guint>*>(p);
         },
         JSC_TYPE_VALUE,
         0
@@ -318,7 +322,7 @@ static JSCValue* on_message_cb(JSCContext* ctx,
 
 }
 
-static bool inject_wpe_firebolt_transport(JSCContext *ctx, PageState* state)
+static bool inject_wpe_firebolt_transport(JSCContext *ctx, std::shared_ptr<PageState> state)
 {
     JSCValue *global = jsc_context_get_global_object(ctx);
     JSCValue *serviceManager = jsc_value_object_get_property(global, "FireboltServiceManager");
@@ -350,8 +354,10 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx, PageState* state)
         ctx,
         "connect",
         G_CALLBACK(connect_cb),
-        state,
-        NULL,
+        new std::shared_ptr<PageState>(state),
+        [](gpointer p) {
+            delete static_cast<std::shared_ptr<PageState>*>(p);
+        },
         JSC_TYPE_VALUE,
         0
     );
@@ -361,7 +367,11 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx, PageState* state)
     // onConnectionStatus()
     JSCValue *on_conn_status_fn = jsc_value_new_function(
       ctx, "onConnectionStatus", G_CALLBACK(on_connection_status_cb),
-      state, NULL, JSC_TYPE_VALUE, 0);
+      new std::shared_ptr<PageState>(state),
+      [](gpointer p) {
+          delete static_cast<std::shared_ptr<PageState>*>(p);
+      },
+      JSC_TYPE_VALUE, 0);
     jsc_value_object_set_property(platform, "onConnectionStatus", on_conn_status_fn);
     g_object_unref(on_conn_status_fn);
     
@@ -370,8 +380,10 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx, PageState* state)
         ctx,
         "send",
         G_CALLBACK(send_cb),
-        state,
-        NULL,
+        new std::shared_ptr<PageState>(state),
+        [](gpointer p) {
+            delete static_cast<std::shared_ptr<PageState>*>(p);
+        },
         JSC_TYPE_VALUE,
         0
     );
@@ -381,7 +393,11 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx, PageState* state)
     // onMessage()
     JSCValue *on_message_fn = jsc_value_new_function(
       ctx, "onMessage", G_CALLBACK(on_message_cb),
-      state, NULL, JSC_TYPE_VALUE, 0);
+      new std::shared_ptr<PageState>(state),
+      [](gpointer p) {
+          delete static_cast<std::shared_ptr<PageState>*>(p);
+      },
+      JSC_TYPE_VALUE, 0);
     jsc_value_object_set_property(platform, "onMessage", on_message_fn);
     g_object_unref(on_message_fn);
 
@@ -390,8 +406,10 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx, PageState* state)
         ctx,
         "disconnect",
         G_CALLBACK(disconnect_cb),
-        state,
-        NULL,
+        new std::shared_ptr<PageState>(state),
+        [](gpointer p) {
+            delete static_cast<std::shared_ptr<PageState>*>(p);
+        },
         JSC_TYPE_VALUE,
         0
     );
@@ -449,7 +467,7 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
     gchar *js_source = nullptr;
     gsize js_len = 0;
     JSCValue *result = nullptr;
-    PageState *state = nullptr;
+    std::shared_ptr<PageState> state;
 
     if (settings) {
         g_variant_lookup(settings, "fireboltEndpoint", "s", &fireboltEndpoint);
@@ -479,7 +497,7 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
     g_free(js_source);
     js_source = nullptr;
 
-    state = new PageState();
+    state = std::make_shared<PageState>();
     state->messageBus = std::make_unique<AsyncBus>(g_main_context_default());
     state->connectionBus = std::make_unique<AsyncBus>(g_main_context_default());
     state->fireboltEndpoint = fireboltEndpoint;
@@ -489,17 +507,15 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
 
     if (!inject_wpe_firebolt_transport(jsContext, state)) {
         g_warning("failed to inject the transport into the page");
-        delete state;
-        state = nullptr;
         goto cleanup;
     }
 
     g_object_set_data_full(
             G_OBJECT(page),
             "page-state",
-            state,
+            new std::shared_ptr<PageState>(state),
             [](gpointer p) {
-                delete static_cast<PageState*>(p);
+                delete static_cast<std::shared_ptr<PageState>*>(p);
             }
         );
     
