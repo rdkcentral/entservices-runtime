@@ -197,7 +197,7 @@ static JSCValue* send_cb(JSCContext* ctx,
         g_warning("send requires a message string parameter");
         return create_result(ctx, false, INVALID_PARAMETERS);
     }
-    if (!jsc_value_is_string((JSCValue*)params[0])) {
+    if (!jsc_value_is_string(params[0])) {
         g_warning("send parameter is not a string");
         return create_result(ctx, false, INVALID_PARAMETERS);
     }
@@ -212,7 +212,7 @@ static JSCValue* send_cb(JSCContext* ctx,
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
     if (shared_state->connected && shared_state->wsClient) {
-        char* jsMessage = jsc_value_to_string((JSCValue*)params[0]);
+        char* jsMessage = jsc_value_to_string(params[0]);
         g_print("send called with message: %s\n", jsMessage);
         if (jsMessage) {
             shared_state->wsClient->SendMessage(jsMessage);
@@ -249,14 +249,14 @@ static JSCValue* on_connection_status_cb(JSCContext* ctx,
         g_warning("onConnectionStatus requires a callback function parameter");
         return create_result(ctx, false, INVALID_PARAMETERS);
     }
-    if (!jsc_value_is_function((JSCValue*)params[0])) {
+    if (!jsc_value_is_function(params[0])) {
         g_warning("onConnectionStatus parameter is not a function");
         return create_result(ctx, false, INVALID_PARAMETERS);
     }
     g_print("Callback function parameter is valid\n");
     guint id = shared_state->connectionBus->addListener(
             ctx,
-            (JSCValue*)params[0]
+            params[0]
         );
     g_print("Listener added to connection bus with id: %u\n", id);
     // unsubscribe()
@@ -316,8 +316,22 @@ static JSCValue* on_message_cb(JSCContext* ctx,
     } else {
         g_print("onMessage callback parameter count is valid: %zu\n", n_params);
     }
+
+    if (!params) {
+        g_warning("onMessage callback parameters array is null");
+        return create_result(ctx, false, INVALID_PARAMETERS);
+    } else {
+        g_print("onMessage callback parameters array is not null\n");
+    }
+
+    if (!params[0]) {
+        g_warning("onMessage callback parameter is null");
+        return create_result(ctx, false, INVALID_PARAMETERS);
+    } else {
+        g_print("onMessage callback parameter is not null\n");
+    }
     
-    if (!jsc_value_is_function((JSCValue*)params[0])) {
+    if (!jsc_value_is_function(params[0])) {
         g_warning("onMessage parameter is not a function");
         return create_result(ctx, false, INVALID_PARAMETERS);
     } else {
@@ -326,7 +340,7 @@ static JSCValue* on_message_cb(JSCContext* ctx,
     
     guint id = shared_state->messageBus->addListener(
             ctx,
-            (JSCValue*)params[0]
+            params[0]
         );
 
     g_print("Listener added to message bus with id: %u\n", id);
