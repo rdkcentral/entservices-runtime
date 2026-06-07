@@ -538,37 +538,18 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
     fireboltEndpoint = nullptr;
     state->connected = false;
 
-    // Store state in map indexed by page pointer
-    auto page_addr = reinterpret_cast<uintptr_t>(page);
-    {
-        std::lock_guard<std::mutex> lock(g_page_states_mutex);
-        g_page_states[page_addr] = state;
-    }
-
-    // Register a cleanup callback when the page is destroyed
-    // Store page address as data so we can look it up in the destructor
+    // Store state on page BEFORE injection so callbacks can retrieve it
     g_object_set_data_full(
-        G_OBJECT(page),
-        "firebolt-page-addr",
-        new uintptr_t(page_addr),
-        [](gpointer data) {
-            auto addr = static_cast<uintptr_t*>(data);
-            {
-                std::lock_guard<std::mutex> lock(g_page_states_mutex);
-                g_page_states.erase(*addr);
-                g_print("Cleaned up page state for page %p from map\n", reinterpret_cast<void*>(*addr));
+            G_OBJECT(page),
+            "page-state",
+            new std::shared_ptr<PageState>(state),
+            [](gpointer p) {
+                delete static_cast<std::shared_ptr<PageState>*>(p);
             }
-            delete addr;
-        }
-    );
+        );
 
     if (!inject_wpe_firebolt_transport(jsContext, page, state)) {
         g_warning("failed to inject the transport into the page");
-        // Clean up from map on failure
-        {
-            std::lock_guard<std::mutex> lock(g_page_states_mutex);
-            g_page_states.erase(page_addr);
-        }
         goto cleanup;
     }
 
