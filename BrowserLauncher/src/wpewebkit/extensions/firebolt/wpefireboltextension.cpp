@@ -24,6 +24,8 @@
  #include "asyncbus.h"
  #include "websocketclient.h"
  #include <memory>
+ #include <map>
+ #include <mutex>
 
 
 struct PageState {
@@ -36,6 +38,10 @@ struct PageState {
     bool connected = false;
     std::unique_ptr<WebSocketClient> wsClient;
 };
+
+// Static map to store page states indexed by page pointer address
+static std::map<uintptr_t, std::shared_ptr<PageState>> g_page_states;
+static std::mutex g_page_states_mutex;
 
 
 static gboolean read_file_to_string(const char* path, gchar** out, gsize* out_len)
@@ -58,14 +64,6 @@ static char* generate_client_id()
     return g_strdup_printf("%016" G_GINT64_MODIFIER "x", r);
 }
 
-
-static PageState* get_page_state(WebKitWebPage* page)
-{
-    return static_cast<PageState*>(
-        g_object_get_data(G_OBJECT(page), "page-state")
-    );
-}
-
 constexpr int PAGE_STATE_UNAVAILABLE = 1001;
 const char* INVALID_STATE_ERROR = "Invalid PageState pointer (magic number mismatch)";
 
@@ -80,19 +78,18 @@ static std::shared_ptr<PageState> validate_page_state(gpointer user_data)
     
     g_print("validate_page_state: casting to WebKitWebPage\n");
     auto page = static_cast<WebKitWebPage*>(user_data);
+    auto page_addr = reinterpret_cast<uintptr_t>(page);
     
-    g_print("validate_page_state: retrieving page state from page object\n");
-    auto state_ptr = static_cast<std::shared_ptr<PageState>*>(
-        g_object_get_data(G_OBJECT(page), "page-state")
-    );
+    g_print("validate_page_state: looking up page state in map\n");
+    std::lock_guard<std::mutex> lock(g_page_states_mutex);
+    auto it = g_page_states.find(page_addr);
     
-    if (!state_ptr) {
-        g_warning("validate_page_state: state_ptr from page is null");
+    if (it == g_page_states.end()) {
+        g_warning("validate_page_state: page state not found in map");
         return nullptr;
     }
     
-    g_print("validate_page_state: dereferencing to get shared_ptr\n");
-    auto shared_state = *state_ptr;
+    auto shared_state = it->second;
     
     if (!shared_state) {
         g_warning("validate_page_state: state shared_ptr is null");
@@ -541,18 +538,37 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
     fireboltEndpoint = nullptr;
     state->connected = false;
 
-    // Store state on page BEFORE injection so callbacks can retrieve it
+    // Store state in map indexed by page pointer
+    auto page_addr = reinterpret_cast<uintptr_t>(page);
+    {
+        std::lock_guard<std::mutex> lock(g_page_states_mutex);
+        g_page_states[page_addr] = state;
+    }
+
+    // Register a cleanup callback when the page is destroyed
+    // Store page address as data so we can look it up in the destructor
     g_object_set_data_full(
-            G_OBJECT(page),
-            "page-state",
-            new std::shared_ptr<PageState>(state),
-            [](gpointer p) {
-                delete static_cast<std::shared_ptr<PageState>*>(p);
+        G_OBJECT(page),
+        "firebolt-page-addr",
+        new uintptr_t(page_addr),
+        [](gpointer data) {
+            auto addr = static_cast<uintptr_t*>(data);
+            {
+                std::lock_guard<std::mutex> lock(g_page_states_mutex);
+                g_page_states.erase(*addr);
+                g_print("Cleaned up page state for page %p from map\n", reinterpret_cast<void*>(*addr));
             }
-        );
+            delete addr;
+        }
+    );
 
     if (!inject_wpe_firebolt_transport(jsContext, page, state)) {
         g_warning("failed to inject the transport into the page");
+        // Clean up from map on failure
+        {
+            std::lock_guard<std::mutex> lock(g_page_states_mutex);
+            g_page_states.erase(page_addr);
+        }
         goto cleanup;
     }
 
