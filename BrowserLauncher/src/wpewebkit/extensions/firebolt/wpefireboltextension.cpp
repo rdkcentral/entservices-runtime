@@ -85,14 +85,14 @@ static std::shared_ptr<PageState> validate_page_state(gpointer user_data)
     
     // user_data now contains the unique page state ID, not a pointer
     auto state_id = reinterpret_cast<uintptr_t>(user_data);
-    g_print("validate_page_state: looking up state with ID %lu in map\n", state_id);
+    g_print("validate_page_state: looking up state with ID %zu in map\n", state_id);
     
     std::lock_guard<std::mutex> lock(g_page_states_mutex);
     
     auto it = g_page_states.find(state_id);
     
     if (it == g_page_states.end()) {
-        g_warning("validate_page_state: page state not found in map for ID %lu", state_id);
+        g_warning("validate_page_state: page state not found in map for ID %zu", state_id);
         // Debug: print all entries in map
         if (g_page_states.empty()) {
             g_warning("validate_page_state: map is empty!");
@@ -112,7 +112,7 @@ static std::shared_ptr<PageState> validate_page_state(gpointer user_data)
         return nullptr;
     }
     
-    g_print("validate_page_state: validation successful for state ID %lu\n", state_id);
+    g_print("validate_page_state: validation successful for state ID %zu\n", state_id);
     return shared_state;
 }
 constexpr int INVALID_PARAMETERS = 1002;
@@ -588,7 +588,7 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
             // Clean up from map on failure
             {
                 std::lock_guard<std::mutex> lock(g_page_states_mutex);
-                g_page_states.erase(page_addr);
+                g_page_states.erase(state_id);
             }
             goto cleanup;
         }
