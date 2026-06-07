@@ -369,6 +369,30 @@
   // configure / get
   // ---------------------------------------------------------------------------
   function _transport(transport) {
+    console.log("Configuring FireboltServiceManager with transport: ");
+    if (typeof transport === "object") {
+      console.log("transport is an object");
+      // check if transport has required methods individually to provide better error messages
+      if (typeof transport.connect !== "function") {
+        console.warn("Transport object is missing required method: connect");
+        return;
+      }
+      if (typeof transport.send !== "function") {
+        console.warn("Transport object is missing required method: send");
+        return;
+      }
+      if (typeof transport.onMessage !== "function") {
+        console.warn("Transport object is missing required method: onMessage");
+        return;
+      }
+      if (typeof transport.onConnectionStatus !== "function") {
+        console.warn("Transport object is missing required method: onConnectionStatus");
+        return;
+      }
+
+    } else {
+      console.warn("Invalid transport passed to FireboltServiceManager.configure: ", transport);
+    }
     __transport = transport;
   }
 
