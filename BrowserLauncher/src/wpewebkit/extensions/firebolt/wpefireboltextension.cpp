@@ -24,31 +24,23 @@
  #include "asyncbus.h"
  #include "websocketclient.h"
  #include <memory>
- #include <map>
  #include <mutex>
 
 
 struct PageState {
     static constexpr uint32_t MAGIC = 0xDEADBEEF;
-    static uint64_t next_id;
     
-    uint64_t id;
     uint32_t magic = MAGIC;
     std::unique_ptr<AsyncBus> messageBus;
     std::unique_ptr<AsyncBus> connectionBus;
     std::string fireboltEndpoint;
     bool connected = false;
     std::unique_ptr<WebSocketClient> wsClient;
-    
-    PageState() : id(next_id++) { }
 };
 
-// Initialize static counter
-uint64_t PageState::next_id = 1;
-
-// Static map to store page states indexed by unique stable ID
-static std::map<uint64_t, std::shared_ptr<PageState>> g_page_states;
-static std::mutex g_page_states_mutex;
+// Single global page state - only one active page at a time in WebKit extension
+static std::shared_ptr<PageState> g_current_page_state;
+static std::mutex g_state_mutex;
 
 
 static gboolean read_file_to_string(const char* path, gchar** out, gsize* out_len)
@@ -76,48 +68,10 @@ const char* INVALID_STATE_ERROR = "Invalid PageState pointer (magic number misma
 
 static std::shared_ptr<PageState> validate_page_state(gpointer user_data)
 {
-    g_print("validate_page_state: checking user_data\n");
-    
-    if (!user_data) {
-        g_warning("validate_page_state: user_data is null");
-        return nullptr;
-    }
-    
-    // user_data contains the page pointer
-    auto page = static_cast<WebKitWebPage*>(user_data);
-    g_print("validate_page_state: page pointer = %p\n", page);
-    
-    // Retrieve the state ID from the page object
-    auto state_id_ptr = static_cast<uint64_t*>(
-        g_object_get_data(G_OBJECT(page), "firebolt-state-id")
-    );
-    
-    if (!state_id_ptr) {
-        g_warning("validate_page_state: state ID not found in page object data");
-        return nullptr;
-    }
-    
-    auto state_id = *state_id_ptr;
-    g_print("validate_page_state: retrieved state ID %lu from page object\n", state_id);
-    
-    // Now look up the state using the retrieved ID
-    std::lock_guard<std::mutex> lock(g_page_states_mutex);
-    auto it = g_page_states.find(state_id);
-    
-    if (it == g_page_states.end()) {
-        g_warning("validate_page_state: page state not found in map for ID %lu", state_id);
-        return nullptr;
-    }
-    
-    auto shared_state = it->second;
-    
-    if (!shared_state) {
-        g_warning("validate_page_state: state shared_ptr is null");
-        return nullptr;
-    }
-    
-    g_print("validate_page_state: validation successful for state ID %lu\n", state_id);
-    return shared_state;
+    // Simply return the current global page state
+    // The page pointer is just used for callback routing, not for lookup
+    std::lock_guard<std::mutex> lock(g_state_mutex);
+    return g_current_page_state;
 }
 constexpr int INVALID_PARAMETERS = 1002;
 constexpr int PAGE_STATE_CLIENT_ID_MISSING = 1003;
@@ -563,44 +517,20 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
 
     // Scope block to avoid 'goto cleanup' crossing initialization
     {
-        // Store state in map indexed by stable unique ID
-        auto state_id = state->id;
+        // Create new page state and atomically replace the old one
+        // Old state auto-deletes when shared_ptr refcount drops to 0
         {
-            std::lock_guard<std::mutex> lock(g_page_states_mutex);
-            g_page_states[state_id] = state;
-            g_print("Stored page state in map with ID %lu\n", state_id);
+            std::lock_guard<std::mutex> lock(g_state_mutex);
+            g_current_page_state = state;
+            g_print("Replaced page state with new instance\n");
         }
-
-        // Store the state ID on the page object so callbacks can retrieve it
-        g_object_set_data(
-            G_OBJECT(page),
-            "firebolt-state-id",
-            new uint64_t(state_id)
-        );
-        g_print("Stored state ID %lu on page object\n", state_id);
-
-        // Register a cleanup callback when the page is destroyed
-        g_object_set_data_full(
-            G_OBJECT(page),
-            "firebolt-state-cleanup",
-            new uint64_t(state_id),
-            [](gpointer data) {
-                auto id = static_cast<uint64_t*>(data);
-                {
-                    std::lock_guard<std::mutex> lock(g_page_states_mutex);
-                    g_print("Cleaning up page state with ID %lu from map\n", *id);
-                    g_page_states.erase(*id);
-                }
-                delete id;
-            }
-        );
 
         if (!inject_wpe_firebolt_transport(jsContext, page, state)) {
             g_warning("failed to inject the transport into the page");
-            // Clean up from map on failure
+            // Clear state on failure
             {
-                std::lock_guard<std::mutex> lock(g_page_states_mutex);
-                g_page_states.erase(state_id);
+                std::lock_guard<std::mutex> lock(g_state_mutex);
+                g_current_page_state = nullptr;
             }
             goto cleanup;
         }
