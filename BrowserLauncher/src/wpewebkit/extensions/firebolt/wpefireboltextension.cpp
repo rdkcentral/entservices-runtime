@@ -69,21 +69,38 @@ static PageState* get_page_state(WebKitWebPage* page)
 constexpr int PAGE_STATE_UNAVAILABLE = 1001;
 const char* INVALID_STATE_ERROR = "Invalid PageState pointer (magic number mismatch)";
 
-static std::shared_ptr<PageState> validate_page_state(gpointer user_data)
+static std::shared_ptr<PageState>* validate_page_state(gpointer user_data)
 {
+    g_print("validate_page_state: checking user_data pointer\n");
+    
     if (!user_data) {
-        g_warning("PageState pointer is null");
+        g_warning("validate_page_state: user_data is null");
         return nullptr;
     }
     
-    auto* state_ptr = static_cast<std::shared_ptr<PageState>*>(user_data);
-    auto state = *state_ptr;  // Dereference to get the actual shared_ptr
+    g_print("validate_page_state: casting user_data\n");
+    auto state_ptr = static_cast<std::shared_ptr<PageState>*>(user_data);
     
-    if (!state || state->magic != PageState::MAGIC) {
-        g_warning("%s", INVALID_STATE_ERROR);
+    g_print("validate_page_state: checking state_ptr validity\n");
+    if (!state_ptr) {
+        g_warning("validate_page_state: state_ptr is null after cast");
         return nullptr;
     }
-    return state;
+    
+    g_print("validate_page_state: dereferencing to check shared_ptr\n");
+    if (!*state_ptr) {
+        g_warning("validate_page_state: state shared_ptr is null");
+        return nullptr;
+    }
+    
+    g_print("validate_page_state: checking magic number\n");
+    if ((*state_ptr)->magic != PageState::MAGIC) {
+        g_warning("validate_page_state: %s", INVALID_STATE_ERROR);
+        return nullptr;
+    }
+    
+    g_print("validate_page_state: validation successful\n");
+    return state_ptr;
 }
 constexpr int INVALID_PARAMETERS = 1002;
 constexpr int PAGE_STATE_CLIENT_ID_MISSING = 1003;
@@ -125,41 +142,43 @@ static JSCValue* connect_cb(JSCContext* ctx,
     // params[] are JS arguments
     g_print("connect called\n");
 
-    auto state = validate_page_state(user_data);
-    if (!state) {
+    auto state_ptr = validate_page_state(user_data);
+    if (!state_ptr) {
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
+    auto& state = **state_ptr;
+    auto shared_state = *state_ptr;  // Capture this in lambdas to keep PageState alive
 
     // connect using websocket to the firebolt endpoint and set state->connected = true if successful
     // check page state for already connected
-    if (state->connected) {
+    if (state.connected) {
         g_print("Already connected, ignoring connect call\n");
     } else {
-        g_print("Connecting to Firebolt endpoint: %s\n", state->fireboltEndpoint.c_str());
-        state->wsClient = std::make_unique<WebSocketClient>(state->fireboltEndpoint.c_str());
+        g_print("Connecting to Firebolt endpoint: %s\n", state.fireboltEndpoint.c_str());
+        state.wsClient = std::make_unique<WebSocketClient>(state.fireboltEndpoint.c_str());
         g_print("WebSocket client created, attempting to connect...\n");
-        state->connected = state->wsClient->Connect(
+        state.connected = state.wsClient->Connect(
             // onConnect callback
-            [ctx, state](const bool success) {
-                if (state && state->magic == PageState::MAGIC) {
-                    state->connected = success;
+            [ctx, shared_state](const bool success) {
+                if (shared_state && shared_state->magic == PageState::MAGIC) {
+                    shared_state->connected = success;
                     g_print("WebSocket connection %s\n", success ? "successful" : "failed");
-                    state->connectionBus->emit(success? "connected" : "disconnected");
+                    shared_state->connectionBus->emit(success? "connected" : "disconnected");
                 } else {
                     g_warning("onConnect: invalid state object");
                 }
             },
             // onMessage callback
-            [ctx, state](const std::string& message) {
-                if (state && state->magic == PageState::MAGIC) {
+            [ctx, shared_state](const std::string& message) {
+                if (shared_state && shared_state->magic == PageState::MAGIC) {
                     g_print("Received message: %s\n", message.c_str());
-                    state->messageBus->emit(message.c_str());
+                    shared_state->messageBus->emit(message.c_str());
                 } else {
                     g_warning("onMessage: invalid state object");
                 }
             }
         );
-        g_print("WebSocket Connect method returned, connection state: %s\n", state->connected ? "connected" : "not connected");
+        g_print("WebSocket Connect method returned, connection state: %s\n", state.connected ? "connected" : "not connected");
     }
 
     return create_result(ctx, true, 0);
@@ -173,14 +192,15 @@ static JSCValue* disconnect_cb(JSCContext* ctx,
         gpointer user_data)
 {
     g_print("disconnect called\n");
-    auto state = validate_page_state(user_data);
-    if (!state) {
+    auto state_ptr = validate_page_state(user_data);
+    if (!state_ptr) {
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
+    auto& state = **state_ptr;
     g_print("Page state obtained for disconnect\n");
-    if (state && state->connected && state->wsClient) {
-        state->wsClient->Disconnect();
-        state->connected = false;
+    if (state.connected && state.wsClient) {
+        state.wsClient->Disconnect();
+        state.connected = false;
     }
 
     return create_result(ctx, true, 0);
@@ -203,19 +223,20 @@ static JSCValue* send_cb(JSCContext* ctx,
     }
     g_print("send parameter is valid\n");
 
-    auto state = validate_page_state(user_data);
-    if (!state) {
+    auto state_ptr = validate_page_state(user_data);
+    if (!state_ptr) {
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
-    if (state && state->connected && state->wsClient) {
+    auto& state = **state_ptr;
+    if (state.connected && state.wsClient) {
         char* jsMessage = jsc_value_to_string((JSCValue*)params[0]);
         g_print("send called with message: %s\n", jsMessage);
         if (jsMessage) {
-            state->wsClient->SendMessage(jsMessage);
+            state.wsClient->SendMessage(jsMessage);
             g_free(jsMessage);
         }
     } else {
-        if (!state->connected) {
+        if (!state.connected) {
             g_warning("send called but not connected to Firebolt endpoint");
         } else {
             g_warning("send called but WebSocket client is not available");
@@ -233,16 +254,17 @@ static JSCValue* on_connection_status_cb(JSCContext* ctx,
               gpointer user_data)
 {
     g_print("onConnectionStatus callback called\n");
-    auto state = validate_page_state(user_data);
-    if (!state) {
+    auto state_ptr = validate_page_state(user_data);
+    if (!state_ptr) {
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
+    auto& state = **state_ptr;
     if (n_params <1 || !jsc_value_is_function((JSCValue*)params[0])) {
         g_warning("onConnectionStatus requires a callback function parameter");
         return create_result(ctx, false, INVALID_PARAMETERS);
     }
     g_print("Callback function parameter is valid\n");
-    guint id = state->connectionBus->addListener(
+    guint id = state.connectionBus->addListener(
             ctx,
             (JSCValue*)params[0]
         );
@@ -281,17 +303,18 @@ static JSCValue* on_message_cb(JSCContext* ctx,
               gpointer user_data)
 {
     g_print("onMessage callback called\n");
-    auto state = validate_page_state(user_data);
-    if (!state) {
+    auto state_ptr = validate_page_state(user_data);
+    if (!state_ptr) {
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
+    auto& state = **state_ptr;
     
     if (n_params <1 || !jsc_value_is_function((JSCValue*)params[0])) {
         g_warning("onMessage requires a callback function parameter");
         return create_result(ctx, false, INVALID_PARAMETERS);
     }
     
-    guint id = state->messageBus->addListener(
+    guint id = state.messageBus->addListener(
             ctx,
             (JSCValue*)params[0]
         );
