@@ -80,12 +80,23 @@ static std::shared_ptr<PageState> validate_page_state(gpointer user_data)
     auto page = static_cast<WebKitWebPage*>(user_data);
     auto page_addr = reinterpret_cast<uintptr_t>(page);
     
-    g_print("validate_page_state: looking up page state in map\n");
+    g_print("validate_page_state: looking up page %p (addr: %lx) in map\n", page, page_addr);
     std::lock_guard<std::mutex> lock(g_page_states_mutex);
+    
+    // Debug: print all entries in map
+    if (g_page_states.empty()) {
+        g_warning("validate_page_state: map is empty!");
+    } else {
+        g_print("validate_page_state: map contains %zu entries:\n", g_page_states.size());
+        for (auto& entry : g_page_states) {
+            g_print("  - page addr: %lx\n", entry.first);
+        }
+    }
+    
     auto it = g_page_states.find(page_addr);
     
     if (it == g_page_states.end()) {
-        g_warning("validate_page_state: page state not found in map");
+        g_warning("validate_page_state: page state not found in map for addr %lx", page_addr);
         return nullptr;
     }
     
@@ -538,19 +549,41 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
     fireboltEndpoint = nullptr;
     state->connected = false;
 
-    // Store state on page BEFORE injection so callbacks can retrieve it
-    g_object_set_data_full(
+    // Scope block to avoid 'goto cleanup' crossing initialization
+    {
+        // Store state in map indexed by page pointer
+        auto page_addr = reinterpret_cast<uintptr_t>(page);
+        {
+            std::lock_guard<std::mutex> lock(g_page_states_mutex);
+            g_page_states[page_addr] = state;
+            g_print("Stored page state in map for page %p (addr: %lx)\n", page, page_addr);
+        }
+
+        // Register a cleanup callback when the page is destroyed
+        g_object_set_data_full(
             G_OBJECT(page),
-            "page-state",
-            new std::shared_ptr<PageState>(state),
-            [](gpointer p) {
-                delete static_cast<std::shared_ptr<PageState>*>(p);
+            "firebolt-page-addr",
+            new uintptr_t(page_addr),
+            [](gpointer data) {
+                auto addr = static_cast<uintptr_t*>(data);
+                {
+                    std::lock_guard<std::mutex> lock(g_page_states_mutex);
+                    g_print("Cleaning up page state for page %p from map\n", reinterpret_cast<void*>(*addr));
+                    g_page_states.erase(*addr);
+                }
+                delete addr;
             }
         );
 
-    if (!inject_wpe_firebolt_transport(jsContext, page, state)) {
-        g_warning("failed to inject the transport into the page");
-        goto cleanup;
+        if (!inject_wpe_firebolt_transport(jsContext, page, state)) {
+            g_warning("failed to inject the transport into the page");
+            // Clean up from map on failure
+            {
+                std::lock_guard<std::mutex> lock(g_page_states_mutex);
+                g_page_states.erase(page_addr);
+            }
+            goto cleanup;
+        }
     }
 
     cleanup:
