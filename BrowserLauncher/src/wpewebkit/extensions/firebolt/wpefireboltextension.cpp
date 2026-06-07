@@ -285,7 +285,7 @@ static JSCValue* on_connection_status_cb(JSCContext* ctx,
         ctx,
         "off",
         G_CALLBACK(unsubscribe_conn_fn),
-        new std::pair<std::shared_ptr<PageState>, guint>(state, id),
+        new std::pair<std::shared_ptr<PageState>, guint>(*state_ptr, id),
         [](gpointer p) {
             delete static_cast<std::pair<std::shared_ptr<PageState>, guint>*>(p);
         },
@@ -335,7 +335,7 @@ static JSCValue* on_message_cb(JSCContext* ctx,
         ctx,
         "off",
         G_CALLBACK(unsubscribe_msg_fn),
-        new std::pair<std::shared_ptr<PageState>, guint>(state, id),
+        new std::pair<std::shared_ptr<PageState>, guint>(*state_ptr, id),
         [](gpointer p) {
             delete static_cast<std::pair<std::shared_ptr<PageState>, guint>*>(p);
         },
