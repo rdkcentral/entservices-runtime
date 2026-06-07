@@ -27,6 +27,9 @@
 
 
 struct PageState {
+    static constexpr uint32_t MAGIC = 0xDEADBEEF;
+    
+    uint32_t magic = MAGIC;
     std::unique_ptr<AsyncBus> messageBus;
     std::unique_ptr<AsyncBus> connectionBus;
     std::string fireboltEndpoint;
@@ -64,6 +67,22 @@ static PageState* get_page_state(WebKitWebPage* page)
 }
 
 constexpr int PAGE_STATE_UNAVAILABLE = 1001;
+const char* INVALID_STATE_ERROR = "Invalid PageState pointer (magic number mismatch)";
+
+static PageState* validate_page_state(gpointer user_data)
+{
+    if (!user_data) {
+        g_warning("PageState pointer is null");
+        return nullptr;
+    }
+    
+    auto* state = static_cast<PageState*>(user_data);
+    if (state->magic != PageState::MAGIC) {
+        g_warning("%s", INVALID_STATE_ERROR);
+        return nullptr;
+    }
+    return state;
+}
 constexpr int INVALID_PARAMETERS = 1002;
 constexpr int PAGE_STATE_CLIENT_ID_MISSING = 1003;
 constexpr int CLIENT_ID_MISMATCH = 1004;
@@ -104,13 +123,10 @@ static JSCValue* connect_cb(JSCContext* ctx,
     // params[] are JS arguments
     g_print("connect called\n");
 
-    auto* state = get_page_state(static_cast<WebKitWebPage*>(user_data));
-
-    if (!state)
-    {
-        g_warning("connect failed to get the page state");
+    auto* state = validate_page_state(user_data);
+    if (!state) {
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
-     }
+    }
 
     // connect using websocket to the firebolt endpoint and set state->connected = true if successful
     // check page state for already connected
@@ -153,11 +169,11 @@ static JSCValue* disconnect_cb(JSCContext* ctx,
         gpointer user_data)
 {
     g_print("disconnect called\n");
-    auto* state = get_page_state(static_cast<WebKitWebPage*>(user_data));
-    if (!state)    {
-        g_warning("disconnect failed to get the page state");
+    auto* state = validate_page_state(user_data);
+    if (!state) {
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
-     }
+    }
+    g_print("Page state obtained for disconnect\n");
     if (state && state->connected && state->wsClient) {
         state->wsClient->Disconnect();
         state->connected = false;
@@ -175,20 +191,18 @@ static JSCValue* send_cb(JSCContext* ctx,
 {
     // Native implementation
     // params[] are JS arguments
-    
+    g_print("send called\n");
 
     if (n_params <1 || !jsc_value_is_string((JSCValue*)params[0])) {
         g_warning("send requires a message string parameter");
         return create_result(ctx, false, INVALID_PARAMETERS);
     }
+    g_print("send parameter is valid\n");
 
-    auto* state = get_page_state(static_cast<WebKitWebPage*>(user_data));
-    if (!state)
-    {
-        g_warning("send failed to get the page state");
+    auto* state = validate_page_state(user_data);
+    if (!state) {
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
-     }
-
+    }
     if (state && state->connected && state->wsClient) {
         char* jsMessage = jsc_value_to_string((JSCValue*)params[0]);
         g_print("send called with message: %s\n", jsMessage);
@@ -214,20 +228,16 @@ static JSCValue* on_connection_status_cb(JSCContext* ctx,
               const JSCValue* params[],
               gpointer user_data)
 {
-    
-    auto* state = get_page_state(static_cast<WebKitWebPage*>(user_data));
-    if (!state)
-    {
-        g_warning("onConnectionStatus failed to get the page state");
+    g_print("onConnectionStatus callback called\n");
+    auto* state = validate_page_state(user_data);
+    if (!state) {
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
-     }
-
-    
+    }
     if (n_params <1 || !jsc_value_is_function((JSCValue*)params[0])) {
         g_warning("onConnectionStatus requires a callback function parameter");
         return create_result(ctx, false, INVALID_PARAMETERS);
     }
-    
+    g_print("Callback function parameter is valid\n");
     guint id = state->connectionBus->addListener(
             ctx,
             (JSCValue*)params[0]
@@ -267,20 +277,10 @@ static JSCValue* on_message_cb(JSCContext* ctx,
               gpointer user_data)
 {
     g_print("onMessage callback called\n");
-    auto* page = static_cast<WebKitWebPage*>(user_data);
-    if (!page)
-    {
-        g_warning("failed to get the page from user data");
+    auto* state = validate_page_state(user_data);
+    if (!state) {
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
-        
-    auto* state = get_page_state(page);
-    if (!state)
-    {
-        g_warning("failed to get the page state");
-        return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
-    }
-        
     
     if (n_params <1 || !jsc_value_is_function((JSCValue*)params[0])) {
         g_warning("onMessage requires a callback function parameter");
@@ -318,7 +318,7 @@ static JSCValue* on_message_cb(JSCContext* ctx,
 
 }
 
-static bool inject_wpe_firebolt_transport(JSCContext *ctx, WebKitWebPage* page)
+static bool inject_wpe_firebolt_transport(JSCContext *ctx, PageState* state)
 {
     JSCValue *global = jsc_context_get_global_object(ctx);
     JSCValue *serviceManager = jsc_value_object_get_property(global, "FireboltServiceManager");
@@ -350,7 +350,7 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx, WebKitWebPage* page)
         ctx,
         "connect",
         G_CALLBACK(connect_cb),
-        page,
+        state,
         NULL,
         JSC_TYPE_VALUE,
         0
@@ -361,7 +361,7 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx, WebKitWebPage* page)
     // onConnectionStatus()
     JSCValue *on_conn_status_fn = jsc_value_new_function(
       ctx, "onConnectionStatus", G_CALLBACK(on_connection_status_cb),
-      page, NULL, JSC_TYPE_VALUE, 0);
+      state, NULL, JSC_TYPE_VALUE, 0);
     jsc_value_object_set_property(platform, "onConnectionStatus", on_conn_status_fn);
     g_object_unref(on_conn_status_fn);
     
@@ -370,7 +370,7 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx, WebKitWebPage* page)
         ctx,
         "send",
         G_CALLBACK(send_cb),
-        page,
+        state,
         NULL,
         JSC_TYPE_VALUE,
         0
@@ -381,7 +381,7 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx, WebKitWebPage* page)
     // onMessage()
     JSCValue *on_message_fn = jsc_value_new_function(
       ctx, "onMessage", G_CALLBACK(on_message_cb),
-      page, NULL, JSC_TYPE_VALUE, 0);
+      state, NULL, JSC_TYPE_VALUE, 0);
     jsc_value_object_set_property(platform, "onMessage", on_message_fn);
     g_object_unref(on_message_fn);
 
@@ -390,7 +390,7 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx, WebKitWebPage* page)
         ctx,
         "disconnect",
         G_CALLBACK(disconnect_cb),
-        page,
+        state,
         NULL,
         JSC_TYPE_VALUE,
         0
@@ -479,19 +479,20 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
     g_free(js_source);
     js_source = nullptr;
 
-    if (!inject_wpe_firebolt_transport(jsContext, page)) {
-        g_warning("failed to inject the transport into the page");
-        goto cleanup;
-    }
-        
     state = new PageState();
     state->messageBus = std::make_unique<AsyncBus>(g_main_context_default());
     state->connectionBus = std::make_unique<AsyncBus>(g_main_context_default());
     state->fireboltEndpoint = fireboltEndpoint;
     g_free(fireboltEndpoint);
     fireboltEndpoint = nullptr;
-
     state->connected = false;
+
+    if (!inject_wpe_firebolt_transport(jsContext, state)) {
+        g_warning("failed to inject the transport into the page");
+        delete state;
+        state = nullptr;
+        goto cleanup;
+    }
 
     g_object_set_data_full(
             G_OBJECT(page),
