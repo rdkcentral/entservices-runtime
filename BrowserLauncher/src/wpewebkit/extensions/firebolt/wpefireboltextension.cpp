@@ -360,9 +360,9 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx)
 
 
     bool finalResult = false;
-    JSCValue *serviceManagerTransportResult = jsc_value_function_call(serviceManagerTransport, JSC_TYPE_VALUE, &platform, G_TYPE_NONE);
+    JSCValue *serviceManagerTransportResult = jsc_value_function_call(serviceManagerTransport, JSC_TYPE_VALUE, platform, G_TYPE_NONE);
     if (!serviceManagerTransportResult) {
-        g_warning("failed to call FireboltServiceManager.configure");
+        g_warning("failed to call FireboltServiceManager.transport");
     } else {
         g_print("Firebolt transport injected successfully\n");
         g_object_unref(serviceManagerTransportResult);
