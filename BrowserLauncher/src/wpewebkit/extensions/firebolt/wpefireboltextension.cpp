@@ -39,31 +39,10 @@ struct PageState {
 static std::shared_ptr<PageState> g_current_page_state;
 static std::mutex g_state_mutex;
 
-
-static gboolean read_file_to_string(const char* path, gchar** out, gsize* out_len)
-{
-    GError* err = NULL;
-    if (!g_file_get_contents(path, out, out_len, &err)) {
-        g_warning("JS read failed (%s): %s", path, err ? err->message : "unknown");
-        if (err) g_error_free(err);
-        return FALSE;
-    }
-    return TRUE;
-}
-
-static char* generate_client_id()
-{
-    guint64 r =
-        ((guint64)g_random_int() << 32) |
-         (guint64)g_random_int();
-
-    return g_strdup_printf("%016" G_GINT64_MODIFIER "x", r);
-}
-
 constexpr int PAGE_STATE_UNAVAILABLE = 1001;
 const char* INVALID_STATE_ERROR = "Invalid PageState pointer";
 
-static std::shared_ptr<PageState> get_page_state(WebKitWebPage* page)
+static std::shared_ptr<PageState>* get_page_state(WebKitWebPage* page)
 {
 
     if (!page) {
@@ -76,11 +55,11 @@ static std::shared_ptr<PageState> get_page_state(WebKitWebPage* page)
         g_warning("get_page_state: page does not have firebolt-page-state data");
         return nullptr;
     } else {
-        return reinterpret_cast<std::shared_ptr<PageState>>(g_object_get_data(G_OBJECT(page), "firebolt-page-state"));
+        return reinterpret_cast<std::shared_ptr<PageState>*>(g_object_get_data(G_OBJECT(page), "firebolt-page-state"));
     }
 }
 
-static std::shared_ptr<PageState> validate_page_state(gpointer user_data)
+static std::shared_ptr<PageState>* validate_page_state(gpointer user_data)
 {
     if (!user_data) {
         g_warning("validate_page_state: user_data is null");
