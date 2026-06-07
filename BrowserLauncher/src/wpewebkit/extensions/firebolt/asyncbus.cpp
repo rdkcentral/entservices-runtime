@@ -32,10 +32,13 @@ static gboolean deliver_cb(gpointer data)
 }
 
 AsyncBus::AsyncBus(GMainContext* jsContext)
-{
-    m_jsContext = jsContext
+    : m_lock()
+    , m_listeners()
+    , m_nextId(1)
+    , m_jsContext(jsContext
         ? g_main_context_ref(jsContext)
-        : g_main_context_ref(g_main_context_default());
+        : g_main_context_ref(g_main_context_default()))
+{
 }
 
 AsyncBus::~AsyncBus()
@@ -45,18 +48,22 @@ AsyncBus::~AsyncBus()
         g_object_unref(l.ctx);
         g_object_unref(l.cb);
     }
+    // clear listeners map to release any references
+    m_listeners.clear();
+    // free listeners
     g_main_context_unref(m_jsContext);
 }
 
 guint AsyncBus::addListener(JSCContext* ctx, JSCValue* cb)
 {
+    g_print("Adding listener to AsyncBus\n");
     std::lock_guard<std::mutex> lock(m_lock);
-
     guint id = m_nextId++;
     m_listeners.emplace(id, Listener{
         g_object_ref(ctx),
         g_object_ref(cb)
     });
+    g_print("Listener added to AsyncBus with id: %u\n", id);
     return id;
 }
 

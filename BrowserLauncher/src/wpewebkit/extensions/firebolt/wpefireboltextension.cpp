@@ -250,7 +250,7 @@ static JSCValue* on_connection_status_cb(JSCContext* ctx,
             ctx,
             (JSCValue*)params[0]
         );
-    
+    g_print("Listener added to connection bus with id: %u\n", id);
     // unsubscribe()
     auto* unsubscribe_conn_fn = +[](JSCContext* ctx,
                        JSCValue*,
@@ -262,6 +262,7 @@ static JSCValue* on_connection_status_cb(JSCContext* ctx,
         auto* pair_data = static_cast<std::pair<std::shared_ptr<PageState>, guint>*>(data);
         if (pair_data->first) {  // shared_ptr keeps PageState alive
             pair_data->first->connectionBus->removeListener(pair_data->second);
+            g_print("Listener removed from connection bus with id: %u\n", pair_data->second);
         }
         return create_result(ctx, true, 0);
     };
@@ -304,12 +305,16 @@ static JSCValue* on_message_cb(JSCContext* ctx,
     if (n_params <1 || !jsc_value_is_function((JSCValue*)params[0])) {
         g_warning("onMessage requires a callback function parameter");
         return create_result(ctx, false, INVALID_PARAMETERS);
+    } else {
+        g_print("Callback function parameter is valid in onMessage callback\n");
     }
     
     guint id = shared_state->messageBus->addListener(
             ctx,
             (JSCValue*)params[0]
         );
+
+    g_print("Listener added to message bus with id: %u\n", id);
     
     // unsubscribe()
     auto* unsubscribe_msg_fn = +[](JSCContext* ctx,
@@ -325,6 +330,7 @@ static JSCValue* on_message_cb(JSCContext* ctx,
         }
         return create_result(ctx, true, 0);
     };
+    g_print("Creating unsubscribe function for message bus listener with id: %u\n", id);
     return jsc_value_new_function(
         ctx,
         "off",
