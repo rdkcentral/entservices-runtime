@@ -42,6 +42,8 @@ public:
 
     void deliverOnJsThread(char* payload);
 
+    void cleanup();
+
 private:
 
     std::mutex m_lock;

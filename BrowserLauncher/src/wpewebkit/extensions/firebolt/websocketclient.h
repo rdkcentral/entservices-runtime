@@ -22,7 +22,6 @@
  #include <wpe/webkit-web-extension.h>
  #include "soupfunctions.h"
  #include <functional>
-#include <string>
 
 
 
@@ -33,11 +32,13 @@ public:
     ~WebSocketClient();
 
     bool Connect(std::function<void(const bool)>&& onConnect,
-                 std::function<void(const std::string&)>&& onMessage);
+                 std::function<void(const char*)>&& onMessage);
     
-    void SendMessage(const std::string& message);
+    void SendMessage(const char* jsMessage);
 
     void Disconnect();
+
+    void Cleanup();
 
 private:
     char *m_url;
@@ -45,7 +46,7 @@ private:
     SoupWebsocketConnection *m_conn { nullptr };
 
     std::function<void(const bool)> m_onConnect;
-    std::function<void(const std::string&)> m_onMessage;
+    std::function<void(const char*)> m_onMessage;
 
     void onConnection(SoupWebsocketConnection *ws);
     void onMessage(gint type, GBytes *message);

@@ -30,12 +30,17 @@ WebSocketClient::WebSocketClient(const char *url)
 
 WebSocketClient::~WebSocketClient()
 {
-    Disconnect();
+    Cleanup();
     g_free(m_url);
 }
 
+void WebSocketClient::Cleanup()
+{
+    Disconnect();
+}
+
 bool WebSocketClient::Connect(std::function<void(const bool)>&& onConnect,
-                              std::function<void(const std::string&)>&& onMessage)
+                              std::function<void(const char*)>&& onMessage)
 {
     m_session = soup().session_new();
     SoupMessage *msg = soup().message_new("GET", m_url);
@@ -96,9 +101,9 @@ void WebSocketClient::onMessage(gint type, GBytes *message)
     }
     gsize sz;
     const void *ptr = g_bytes_get_data(message, &sz);
-    std::string message_str = std::string(reinterpret_cast<const char*>(ptr), sz);
-    g_message("recv: %s", message_str.c_str());
-    m_onMessage(message_str);
+    const char* c_message = reinterpret_cast<const char*>(ptr);
+    g_message("recv: %s", c_message);
+    m_onMessage(c_message);
 }
 
 void WebSocketClient::onError(GError *error)
@@ -113,13 +118,13 @@ void WebSocketClient::onClosed()
     m_onConnect(false);
 }
 
-void WebSocketClient::SendMessage(const std::string& message)
+void WebSocketClient::SendMessage(const char* jsMessage)
 {
     if (!m_conn) {
         g_printerr("Cannot send message, WebSocket connection is not established\n");
         return;
     }
-    soup().websocket_connection_send_text(m_conn, message.c_str());
+    soup().websocket_connection_send_text(m_conn, jsMessage);
 }
 
 void WebSocketClient::Disconnect()

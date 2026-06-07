@@ -43,14 +43,17 @@ AsyncBus::AsyncBus(GMainContext* jsContext)
 
 AsyncBus::~AsyncBus()
 {
+    cleanup();
+}
+
+void AsyncBus::cleanup()
+{
     std::lock_guard<std::mutex> lock(m_lock);
     for (auto& [id, l] : m_listeners) {
         g_object_unref(l.ctx);
         g_object_unref(l.cb);
     }
-    // clear listeners map to release any references
     m_listeners.clear();
-    // free listeners
     g_main_context_unref(m_jsContext);
 }
 
