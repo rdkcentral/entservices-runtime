@@ -255,6 +255,7 @@
   }
 
   function _onStatus(status) {
+    console.log("Transport status changed: " + status);
     _connected = (status === "connected");
     if (_connected) {
       if (!_fireboltInstance) { _fireboltInstance = _buildFireboltInstance(); }
@@ -280,6 +281,7 @@
         reject: reject,
       };
       var msg = JSON.stringify({ jsonrpc: "2.0", id: id, method: methodName, params: params || {} });
+      console.log("Sending message: " + msg);
       var result = t.send(msg);
       if (!result.success) {
         delete _pendingCalls[id];
@@ -322,6 +324,7 @@
       var msg = JSON.stringify({ jsonrpc: "2.0", id: id, method: eventName, params: { listen: true } });
       var result = t.send(msg);
       if (!result.success) {
+        console.warn("Transport send failed (errorCode: " + result.errorCode + ")");
         delete _pendingCalls[id];
         var ls = _eventListeners[eventName];
         if (ls) { var i = ls.indexOf(callback); if (i !== -1) ls.splice(i, 1); }
@@ -403,13 +406,18 @@
         "The WPE extension must call configure({ clientId }) first."
       );
     }
+    console.log("FireboltServiceManager.get() called");
     if (_connected && _fireboltInstance) { return Promise.resolve(_fireboltInstance); }
     var p = new Promise(function (resolve) { _connectionResolvers.push(resolve); });
     if (!_connecting) {
+      console.log("Initiating transport connection...");
       _connecting = true;
       var t = __transport;
+      console.log("Registering transport onMessage` callback...");
       t.onMessage(_onMessage);
+      console.log("Registering transport onConnectionStatus callback...");
       t.onConnectionStatus(_onStatus);
+      console.log("Calling transport.connect()...");
       t.connect();
     }
     return p;

@@ -105,12 +105,21 @@ static JSCValue* connect_cb(JSCContext* ctx,
     g_print("connect called\n");
 
     auto* state = get_page_state(static_cast<WebKitWebPage*>(user_data));
+
+    if (!state)
+    {
+        g_warning("connect failed to get the page state");
+        return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
+     }
+
     // connect using websocket to the firebolt endpoint and set state->connected = true if successful
     // check page state for already connected
     if (state->connected) {
         g_print("Already connected, ignoring connect call\n");
     } else {
+        g_print("Connecting to Firebolt endpoint: %s\n", state->fireboltEndpoint.c_str());
         state->wsClient = std::make_unique<WebSocketClient>(state->fireboltEndpoint.c_str());
+        g_print("WebSocket client created, attempting to connect...\n");
         state->connected = state->wsClient->Connect(
             // onConnect callback
             [ctx, page=static_cast<WebKitWebPage*>(user_data)](const bool success) {
@@ -130,6 +139,7 @@ static JSCValue* connect_cb(JSCContext* ctx,
                 }
             }
         );
+        g_print("WebSocket Connect method returned, connection state: %s\n", state->connected ? "connected" : "not connected");
     }
 
     return create_result(ctx, true, 0);
@@ -142,8 +152,12 @@ static JSCValue* disconnect_cb(JSCContext* ctx,
         const JSCValue* params[],
         gpointer user_data)
 {
-    
+    g_print("disconnect called\n");
     auto* state = get_page_state(static_cast<WebKitWebPage*>(user_data));
+    if (!state)    {
+        g_warning("disconnect failed to get the page state");
+        return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
+     }
     if (state && state->connected && state->wsClient) {
         state->wsClient->Disconnect();
         state->connected = false;
@@ -169,12 +183,24 @@ static JSCValue* send_cb(JSCContext* ctx,
     }
 
     auto* state = get_page_state(static_cast<WebKitWebPage*>(user_data));
+    if (!state)
+    {
+        g_warning("send failed to get the page state");
+        return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
+     }
+
     if (state && state->connected && state->wsClient) {
         char* jsMessage = jsc_value_to_string((JSCValue*)params[0]);
         g_print("send called with message: %s\n", jsMessage);
         if (jsMessage) {
             state->wsClient->SendMessage(jsMessage);
             g_free(jsMessage);
+        }
+    } else {
+        if (!state->connected) {
+            g_warning("send called but not connected to Firebolt endpoint");
+        } else {
+            g_warning("send called but WebSocket client is not available");
         }
     }
 
@@ -191,7 +217,10 @@ static JSCValue* on_connection_status_cb(JSCContext* ctx,
     
     auto* state = get_page_state(static_cast<WebKitWebPage*>(user_data));
     if (!state)
+    {
+        g_warning("onConnectionStatus failed to get the page state");
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
+     }
 
     
     if (n_params <1 || !jsc_value_is_function((JSCValue*)params[0])) {
@@ -237,10 +266,21 @@ static JSCValue* on_message_cb(JSCContext* ctx,
               const JSCValue* params[],
               gpointer user_data)
 {
+    g_print("onMessage callback called\n");
     auto* page = static_cast<WebKitWebPage*>(user_data);
+    if (!page)
+    {
+        g_warning("failed to get the page from user data");
+        return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
+    }
+        
     auto* state = get_page_state(page);
     if (!state)
+    {
+        g_warning("failed to get the page state");
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
+    }
+        
     
     if (n_params <1 || !jsc_value_is_function((JSCValue*)params[0])) {
         g_warning("onMessage requires a callback function parameter");
@@ -278,7 +318,7 @@ static JSCValue* on_message_cb(JSCContext* ctx,
 
 }
 
-static bool inject_wpe_firebolt_transport(JSCContext *ctx)
+static bool inject_wpe_firebolt_transport(JSCContext *ctx, WebKitWebPage* page)
 {
     JSCValue *global = jsc_context_get_global_object(ctx);
     JSCValue *serviceManager = jsc_value_object_get_property(global, "FireboltServiceManager");
@@ -310,7 +350,7 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx)
         ctx,
         "connect",
         G_CALLBACK(connect_cb),
-        NULL,
+        page,
         NULL,
         JSC_TYPE_VALUE,
         0
@@ -321,7 +361,7 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx)
     // onConnectionStatus()
     JSCValue *on_conn_status_fn = jsc_value_new_function(
       ctx, "onConnectionStatus", G_CALLBACK(on_connection_status_cb),
-      NULL, NULL, JSC_TYPE_VALUE, 0);
+      page, NULL, JSC_TYPE_VALUE, 0);
     jsc_value_object_set_property(platform, "onConnectionStatus", on_conn_status_fn);
     g_object_unref(on_conn_status_fn);
     
@@ -330,7 +370,7 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx)
         ctx,
         "send",
         G_CALLBACK(send_cb),
-        NULL,
+        page,
         NULL,
         JSC_TYPE_VALUE,
         0
@@ -341,7 +381,7 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx)
     // onMessage()
     JSCValue *on_message_fn = jsc_value_new_function(
       ctx, "onMessage", G_CALLBACK(on_message_cb),
-      NULL, NULL, JSC_TYPE_VALUE, 0);
+      page, NULL, JSC_TYPE_VALUE, 0);
     jsc_value_object_set_property(platform, "onMessage", on_message_fn);
     g_object_unref(on_message_fn);
 
@@ -350,7 +390,7 @@ static bool inject_wpe_firebolt_transport(JSCContext *ctx)
         ctx,
         "disconnect",
         G_CALLBACK(disconnect_cb),
-        NULL,
+        page,
         NULL,
         JSC_TYPE_VALUE,
         0
@@ -439,7 +479,7 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
     g_free(js_source);
     js_source = nullptr;
 
-    if (!inject_wpe_firebolt_transport(jsContext)) {
+    if (!inject_wpe_firebolt_transport(jsContext, page)) {
         g_warning("failed to inject the transport into the page");
         goto cleanup;
     }
