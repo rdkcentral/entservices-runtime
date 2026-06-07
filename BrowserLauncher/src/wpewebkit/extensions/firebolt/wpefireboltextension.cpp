@@ -93,12 +93,6 @@ static std::shared_ptr<PageState>* validate_page_state(gpointer user_data)
         return nullptr;
     }
     
-    g_print("validate_page_state: checking magic number\n");
-    if ((*state_ptr)->magic != PageState::MAGIC) {
-        g_warning("validate_page_state: %s", INVALID_STATE_ERROR);
-        return nullptr;
-    }
-    
     g_print("validate_page_state: validation successful\n");
     return state_ptr;
 }
@@ -147,6 +141,10 @@ static JSCValue* connect_cb(JSCContext* ctx,
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
     auto& state = **state_ptr;
+    if (state.magic != PageState::MAGIC) {
+        g_warning("connect_cb: invalid state magic number");
+        return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
+    }
     auto shared_state = *state_ptr;  // Capture this in lambdas to keep PageState alive
 
     // connect using websocket to the firebolt endpoint and set state->connected = true if successful
@@ -197,6 +195,10 @@ static JSCValue* disconnect_cb(JSCContext* ctx,
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
     auto& state = **state_ptr;
+    if (state.magic != PageState::MAGIC) {
+        g_warning("disconnect_cb: invalid state magic number");
+        return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
+    }
     g_print("Page state obtained for disconnect\n");
     if (state.connected && state.wsClient) {
         state.wsClient->Disconnect();
@@ -228,6 +230,10 @@ static JSCValue* send_cb(JSCContext* ctx,
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
     auto& state = **state_ptr;
+    if (state.magic != PageState::MAGIC) {
+        g_warning("send_cb: invalid state magic number");
+        return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
+    }
     if (state.connected && state.wsClient) {
         char* jsMessage = jsc_value_to_string((JSCValue*)params[0]);
         g_print("send called with message: %s\n", jsMessage);
@@ -259,6 +265,10 @@ static JSCValue* on_connection_status_cb(JSCContext* ctx,
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
     auto& state = **state_ptr;
+    if (state.magic != PageState::MAGIC) {
+        g_warning("on_connection_status_cb: invalid state magic number");
+        return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
+    }
     if (n_params <1 || !jsc_value_is_function((JSCValue*)params[0])) {
         g_warning("onConnectionStatus requires a callback function parameter");
         return create_result(ctx, false, INVALID_PARAMETERS);
@@ -306,8 +316,17 @@ static JSCValue* on_message_cb(JSCContext* ctx,
     auto state_ptr = validate_page_state(user_data);
     if (!state_ptr) {
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
+    } else {
+        g_print("Page state validated successfully in onMessage callback\n");
     }
+
     auto& state = **state_ptr;
+    if (state.magic != PageState::MAGIC) {
+        g_warning("on_message_cb: invalid state magic number");
+        return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
+    } else {
+        g_print("Page state magic number validated successfully in onMessage callback\n");
+    }
     
     if (n_params <1 || !jsc_value_is_function((JSCValue*)params[0])) {
         g_warning("onMessage requires a callback function parameter");
