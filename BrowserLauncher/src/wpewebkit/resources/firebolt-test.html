@@ -442,7 +442,15 @@
     }
   }
 
-  window.addEventListener("DOMContentLoaded", main);
+
+  if (document.readyState === "loading") {
+      // DOM not ready yet
+      window.addEventListener("DOMContentLoaded", main);
+  } else {
+      // DOM already ready
+      main();
+  }
+
   </script>
 </body>
 </html>
