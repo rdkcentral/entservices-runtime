@@ -193,8 +193,12 @@ static JSCValue* send_cb(JSCContext* ctx,
     // params[] are JS arguments
     g_print("send called\n");
 
-    if (n_params <1 || !jsc_value_is_string((JSCValue*)params[0])) {
+    if (n_params < 1) {
         g_warning("send requires a message string parameter");
+        return create_result(ctx, false, INVALID_PARAMETERS);
+    }
+    if (!jsc_value_is_string((JSCValue*)params[0])) {
+        g_warning("send parameter is not a string");
         return create_result(ctx, false, INVALID_PARAMETERS);
     }
     g_print("send parameter is valid\n");
@@ -241,8 +245,12 @@ static JSCValue* on_connection_status_cb(JSCContext* ctx,
         g_warning("on_connection_status_cb: invalid state magic number");
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
-    if (n_params <1 || !jsc_value_is_function((JSCValue*)params[0])) {
+    if (n_params < 1) {
         g_warning("onConnectionStatus requires a callback function parameter");
+        return create_result(ctx, false, INVALID_PARAMETERS);
+    }
+    if (!jsc_value_is_function((JSCValue*)params[0])) {
+        g_warning("onConnectionStatus parameter is not a function");
         return create_result(ctx, false, INVALID_PARAMETERS);
     }
     g_print("Callback function parameter is valid\n");
@@ -302,8 +310,15 @@ static JSCValue* on_message_cb(JSCContext* ctx,
         g_print("Page state magic number validated successfully in onMessage callback\n");
     }
     
-    if (n_params <1 || !jsc_value_is_function((JSCValue*)params[0])) {
+    if (n_params < 1) {
         g_warning("onMessage requires a callback function parameter");
+        return create_result(ctx, false, INVALID_PARAMETERS);
+    } else {
+        g_print("onMessage callback parameter count is valid: %zu\n", n_params);
+    }
+    
+    if (!jsc_value_is_function((JSCValue*)params[0])) {
+        g_warning("onMessage parameter is not a function");
         return create_result(ctx, false, INVALID_PARAMETERS);
     } else {
         g_print("Callback function parameter is valid in onMessage callback\n");
