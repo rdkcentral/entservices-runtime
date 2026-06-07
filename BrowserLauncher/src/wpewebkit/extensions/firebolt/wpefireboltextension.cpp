@@ -140,22 +140,21 @@ static JSCValue* connect_cb(JSCContext* ctx,
     if (!state_ptr) {
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
-    auto& state = **state_ptr;
-    if (state.magic != PageState::MAGIC) {
+    auto shared_state = *state_ptr;  // Keep a copy to maintain lifetime
+    if (!shared_state || shared_state->magic != PageState::MAGIC) {
         g_warning("connect_cb: invalid state magic number");
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
-    auto shared_state = *state_ptr;  // Capture this in lambdas to keep PageState alive
 
     // connect using websocket to the firebolt endpoint and set state->connected = true if successful
     // check page state for already connected
-    if (state.connected) {
+    if (shared_state->connected) {
         g_print("Already connected, ignoring connect call\n");
     } else {
-        g_print("Connecting to Firebolt endpoint: %s\n", state.fireboltEndpoint.c_str());
-        state.wsClient = std::make_unique<WebSocketClient>(state.fireboltEndpoint.c_str());
+        g_print("Connecting to Firebolt endpoint: %s\n", shared_state->fireboltEndpoint.c_str());
+        shared_state->wsClient = std::make_unique<WebSocketClient>(shared_state->fireboltEndpoint.c_str());
         g_print("WebSocket client created, attempting to connect...\n");
-        state.connected = state.wsClient->Connect(
+        shared_state->connected = shared_state->wsClient->Connect(
             // onConnect callback
             [ctx, shared_state](const bool success) {
                 if (shared_state && shared_state->magic == PageState::MAGIC) {
@@ -176,7 +175,7 @@ static JSCValue* connect_cb(JSCContext* ctx,
                 }
             }
         );
-        g_print("WebSocket Connect method returned, connection state: %s\n", state.connected ? "connected" : "not connected");
+        g_print("WebSocket Connect method returned, connection state: %s\n", shared_state->connected ? "connected" : "not connected");
     }
 
     return create_result(ctx, true, 0);
@@ -194,15 +193,15 @@ static JSCValue* disconnect_cb(JSCContext* ctx,
     if (!state_ptr) {
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
-    auto& state = **state_ptr;
-    if (state.magic != PageState::MAGIC) {
+    auto shared_state = *state_ptr;  // Keep a copy to maintain lifetime
+    if (!shared_state || shared_state->magic != PageState::MAGIC) {
         g_warning("disconnect_cb: invalid state magic number");
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
     g_print("Page state obtained for disconnect\n");
-    if (state.connected && state.wsClient) {
-        state.wsClient->Disconnect();
-        state.connected = false;
+    if (shared_state->connected && shared_state->wsClient) {
+        shared_state->wsClient->Disconnect();
+        shared_state->connected = false;
     }
 
     return create_result(ctx, true, 0);
@@ -229,20 +228,20 @@ static JSCValue* send_cb(JSCContext* ctx,
     if (!state_ptr) {
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
-    auto& state = **state_ptr;
-    if (state.magic != PageState::MAGIC) {
+    auto shared_state = *state_ptr;  // Keep a copy to maintain lifetime
+    if (!shared_state || shared_state->magic != PageState::MAGIC) {
         g_warning("send_cb: invalid state magic number");
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
-    if (state.connected && state.wsClient) {
+    if (shared_state->connected && shared_state->wsClient) {
         char* jsMessage = jsc_value_to_string((JSCValue*)params[0]);
         g_print("send called with message: %s\n", jsMessage);
         if (jsMessage) {
-            state.wsClient->SendMessage(jsMessage);
+            shared_state->wsClient->SendMessage(jsMessage);
             g_free(jsMessage);
         }
     } else {
-        if (!state.connected) {
+        if (!shared_state->connected) {
             g_warning("send called but not connected to Firebolt endpoint");
         } else {
             g_warning("send called but WebSocket client is not available");
@@ -264,8 +263,8 @@ static JSCValue* on_connection_status_cb(JSCContext* ctx,
     if (!state_ptr) {
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
-    auto& state = **state_ptr;
-    if (state.magic != PageState::MAGIC) {
+    auto shared_state = *state_ptr;  // Keep a copy to maintain lifetime
+    if (!shared_state || shared_state->magic != PageState::MAGIC) {
         g_warning("on_connection_status_cb: invalid state magic number");
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
@@ -274,7 +273,7 @@ static JSCValue* on_connection_status_cb(JSCContext* ctx,
         return create_result(ctx, false, INVALID_PARAMETERS);
     }
     g_print("Callback function parameter is valid\n");
-    guint id = state.connectionBus->addListener(
+    guint id = shared_state->connectionBus->addListener(
             ctx,
             (JSCValue*)params[0]
         );
@@ -320,8 +319,8 @@ static JSCValue* on_message_cb(JSCContext* ctx,
         g_print("Page state validated successfully in onMessage callback\n");
     }
 
-    auto& state = **state_ptr;
-    if (state.magic != PageState::MAGIC) {
+    auto shared_state = *state_ptr;  // Keep a copy to maintain lifetime
+    if (!shared_state || shared_state->magic != PageState::MAGIC) {
         g_warning("on_message_cb: invalid state magic number");
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     } else {
@@ -333,7 +332,7 @@ static JSCValue* on_message_cb(JSCContext* ctx,
         return create_result(ctx, false, INVALID_PARAMETERS);
     }
     
-    guint id = state.messageBus->addListener(
+    guint id = shared_state->messageBus->addListener(
             ctx,
             (JSCValue*)params[0]
         );
