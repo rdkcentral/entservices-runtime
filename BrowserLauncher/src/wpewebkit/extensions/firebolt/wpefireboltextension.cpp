@@ -466,7 +466,6 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
     gchar *fireboltEndpoint = nullptr;
     gchar *fireboltUserScript = nullptr;
     gchar *js_source = nullptr;
-    gsize js_len = 0;
     JSCValue *result = nullptr;
     std::shared_ptr<PageState> state;
 
@@ -514,10 +513,10 @@ static void onWindowObjectCleared(WebKitScriptWorld *world,
         [](gpointer data) {
             // Custom destroy function to clean up the shared_ptr when the page is destroyed
             auto* state_ptr = static_cast<std::shared_ptr<PageState>*>(data);
-            state_ptr->messageBus->cleanup();
-            state_ptr->connectionBus->cleanup();
-            if (state_ptr->wsClient) {
-                state_ptr->wsClient->Cleanup();
+            (*state_ptr)->messageBus->cleanup();
+            (*state_ptr)->connectionBus->cleanup();
+            if ((*state_ptr)->wsClient) {
+                (*state_ptr)->wsClient->Cleanup();
             }
             delete state_ptr;  // This will decrease the ref count of the shared_ptr and clean up if it reaches 0
         }
