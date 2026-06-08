@@ -115,20 +115,20 @@ static JSCValue* connect_cb(gpointer user_data)
 
     // connect using websocket to the firebolt endpoint and set state->connected = true if successful
     // check page state for already connected
-    if (shared_state->connected) {
+    if ((*shared_state)->connected) {
         g_print("Already connected, ignoring connect call\n");
         return create_result(ctx, true, 0);
     } else {
-        g_print("Connecting to Firebolt endpoint: %s\n", shared_state->fireboltEndpoint.c_str());
-        shared_state->wsClient = std::make_unique<WebSocketClient>(shared_state->fireboltEndpoint.c_str());
+        g_print("Connecting to Firebolt endpoint: %s\n", (*shared_state)->fireboltEndpoint.c_str());
+        (*shared_state)->wsClient = std::make_unique<WebSocketClient>((*shared_state)->fireboltEndpoint.c_str());
         g_print("WebSocket client created, attempting to connect...\n");
-        shared_state->connected = shared_state->wsClient->Connect(
+        (*shared_state)->connected = (*shared_state)->wsClient->Connect(
             // onConnect callback
             [ctx, shared_state](const bool success) {
                 if (shared_state) {
-                    shared_state->connected = success;
+                    (*shared_state)->connected = success;
                     g_print("WebSocket connection %s\n", success ? "successful" : "failed");
-                    shared_state->connectionBus->emit(success? "connected" : "disconnected");
+                    (*shared_state)->connectionBus->emit(success? "connected" : "disconnected");
                 } else {
                     g_warning("onConnect: invalid state object");
                 }
@@ -137,14 +137,14 @@ static JSCValue* connect_cb(gpointer user_data)
             [ctx, shared_state](const char* message) {
                 if (shared_state) {
                     g_print("Received message: %s\n", message);
-                    shared_state->messageBus->emit(message);
+                    (*shared_state)->messageBus->emit(message);
                 } else {
                     g_warning("onMessage: invalid state object");
                 }
             }
         );
-        g_print("WebSocket Connect method returned, connection state: %s\n", shared_state->connected ? "connected" : "not connected");
-        if (shared_state->connected) {
+        g_print("WebSocket Connect method returned, connection state: %s\n", (*shared_state)->connected ? "connected" : "not connected");
+        if ((*shared_state)->connected) {
             return create_result(ctx, true, 0);
         }
     }
@@ -162,11 +162,11 @@ static JSCValue* disconnect_cb(gpointer user_data)
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
     g_print("Page state obtained for disconnect\n");
-    if (shared_state->connected && shared_state->wsClient) {
-        shared_state->wsClient->Disconnect();
-        shared_state->connected = false;
+    if ((*shared_state)->connected && (*shared_state)->wsClient) {
+        (*shared_state)->wsClient->Disconnect();
+        (*shared_state)->connected = false;
     } else {
-        if (!shared_state->connected) {
+        if (!(*shared_state)->connected) {
             g_warning("disconnect called but not connected to Firebolt endpoint");
         } else {
             g_warning("disconnect called but WebSocket client is not available");
@@ -195,10 +195,10 @@ static JSCValue* send_cb(const char* jsMessage,
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
     g_print("Page state obtained for send\n");
-    if (shared_state->connected && shared_state->wsClient) {
+    if ((*shared_state)->connected && (*shared_state)->wsClient) {
         g_print("send called with message: %s\n", jsMessage);
         if (jsMessage) {
-            shared_state->wsClient->SendMessage(jsMessage);
+            (*shared_state)->wsClient->SendMessage(jsMessage);
             g_print("Message sent through WebSocket client\n");}
     } else {
         if (!shared_state->connected) {
@@ -229,7 +229,7 @@ static JSCValue* on_connection_status_cb(JSCValue* js_function,
         g_warning("onConnectionStatus: invalid page state");
         return create_result(ctx, false, PAGE_STATE_UNAVAILABLE);
     }
-    guint id = shared_state->connectionBus->addListener(
+    guint id = (*shared_state)->connectionBus->addListener(
             ctx,
             js_function
         );
@@ -243,7 +243,7 @@ static JSCValue* on_connection_status_cb(JSCValue* js_function,
         if (pair_data->first) {  // shared_ptr keeps PageState alive
             auto shared_state = get_page_state(pair_data->first);
             if (shared_state) {
-                shared_state->connectionBus->removeListener(pair_data->second);
+                (*shared_state)->connectionBus->removeListener(pair_data->second);
                 g_print("Listener removed from connection bus with id: %u\n", pair_data->second);
             } else {
                 g_warning("unsubscribe_conn_fn: failed to get page state for unsubscribe");
@@ -289,7 +289,7 @@ static JSCValue* on_message_cb(JSCValue* js_function,
     
     g_print("onMessage parameter is a valid function\n");
     
-    guint id = shared_state->messageBus->addListener(
+    guint id = (*shared_state)->messageBus->addListener(
             ctx,
             js_function
         );
@@ -304,7 +304,7 @@ static JSCValue* on_message_cb(JSCValue* js_function,
         if (pair_data->first) {  // shared_ptr keeps PageState alive
             auto shared_state = get_page_state(pair_data->first);
             if (shared_state) {
-                shared_state->messageBus->removeListener(pair_data->second);
+                (*shared_state)->messageBus->removeListener(pair_data->second);
                 g_print("Listener removed from message bus with id: %u\n", pair_data->second);
             } else {
                 g_warning("unsubscribe_msg_fn: failed to get page state for unsubscribe");
