@@ -201,7 +201,7 @@ static JSCValue* send_cb(const char* jsMessage,
             (*shared_state)->wsClient->SendMessage(jsMessage);
             g_print("Message sent through WebSocket client\n");}
     } else {
-        if (!shared_state->connected) {
+        if (!(*shared_state)->connected) {
             g_warning("send called but not connected to Firebolt endpoint");
         } else {
             g_warning("send called but WebSocket client is not available");
