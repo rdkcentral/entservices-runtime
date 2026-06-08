@@ -53,7 +53,8 @@
     #results-panel {
       border: 1px solid #21262d;
       border-radius: 6px;
-      overflow: hidden;
+      overflow-y: auto;
+      max-height: 400px;
       font-size: 0.82rem;
     }
 
@@ -103,18 +104,100 @@
     }
     #summary .ok  { color: #3fb950; }
     #summary .err { color: #f85149; }
+
+    /* ── TV Remote Navigation Buttons ─────────────────────────────────────── */
+    .button-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+
+    .nav-btn {
+      flex: 0 1 180px;
+      padding: 12px 16px;
+      background: #21262d;
+      border: 2px solid #30363d;
+      border-radius: 6px;
+      color: #8b949e;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .nav-btn:hover {
+      background: #30363d;
+      border-color: #58a6ff;
+      color: #58a6ff;
+    }
+
+    .nav-btn:focus {
+      outline: none;
+      background: #0d1117;
+      border-color: #58a6ff;
+      color: #58a6ff;
+      box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.3);
+    }
+
+    .nav-btn:active {
+      background: #161b22;
+      transform: scale(0.98);
+    }
+
+    .section-with-controls {
+      margin-bottom: 24px;
+    }
+
+    h2 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    h2::after {
+      content: '';
+      flex: 1;
+    }
+
+    .control-buttons {
+      display: flex;
+      gap: 8px;
+    }
+
+    .control-buttons .nav-btn {
+      flex: 0 1 auto;
+      padding: 8px 12px;
+      font-size: 0.85rem;
+    }
   </style>
 </head>
 <body>
 
   <h1>Firebolt Service Manager Test</h1>
 
-  <h2>Status Log</h2>
-  <div id="log-panel"></div>
+  <div class="section-with-controls">
+    <h2>
+      Status Log
+      <div class="control-buttons">
+        <button id="log-up-btn" class="nav-btn">↑ Top</button>
+        <button id="log-down-btn" class="nav-btn">↓ Bottom</button>
+      </div>
+    </h2>
+    <div id="log-panel"></div>
+  </div>
 
-  <h2>Method Results</h2>
-  <div id="results-panel">
-    <div class="placeholder">Waiting for FireboltServiceManager&hellip;</div>
+  <div class="section-with-controls">
+    <h2>
+      Method Results
+      <div class="control-buttons">
+        <button id="results-up-btn" class="nav-btn">↑ Top</button>
+        <button id="results-down-btn" class="nav-btn">↓ Bottom</button>
+      </div>
+    </h2>
+    <div id="results-panel">
+      <div class="placeholder">Waiting for FireboltServiceManager&hellip;</div>
+    </div>
   </div>
 
   <div id="summary"></div>
@@ -123,17 +206,68 @@
   "use strict";
 
   // ──────────────────────────────────────────────────────────────────────────
+  // Navigation and scroll handlers
+  // ──────────────────────────────────────────────────────────────────────────
+
+  function setupNavigationButtons() {
+    var logUpBtn    = document.getElementById("log-up-btn");
+    var logDownBtn  = document.getElementById("log-down-btn");
+    var resultsUpBtn   = document.getElementById("results-up-btn");
+    var resultsDownBtn = document.getElementById("results-down-btn");
+    var logPanel    = document.getElementById("log-panel");
+    var resultsPanel   = document.getElementById("results-panel");
+
+    var SCROLL_INCREMENT = 50; // pixels to scroll per button press
+
+    // Scroll functions
+    function scrollUp(panel) {
+      panel.scrollBy({ top: -SCROLL_INCREMENT, behavior: "smooth" });
+    }
+
+    function scrollDown(panel) {
+      panel.scrollBy({ top: SCROLL_INCREMENT, behavior: "smooth" });
+    }
+
+    // Button event listeners
+    logUpBtn.addEventListener("click", function () { scrollUp(logPanel); });
+    logDownBtn.addEventListener("click", function () { scrollDown(logPanel); });
+    resultsUpBtn.addEventListener("click", function () { scrollUp(resultsPanel); });
+    resultsDownBtn.addEventListener("click", function () { scrollDown(resultsPanel); });
+
+    // Set Up Log button as focused by default
+    setTimeout(function () {
+      logUpBtn.focus();
+    }, 100);
+
+    // Optional: keyboard navigation between buttons
+    var allButtons = [logUpBtn, logDownBtn, resultsUpBtn, resultsDownBtn];
+    allButtons.forEach(function (btn) {
+      btn.addEventListener("keydown", function (e) {
+        if (e.key === "ArrowRight") {
+          var currentIdx = allButtons.indexOf(btn);
+          var nextIdx = (currentIdx + 1) % allButtons.length;
+          allButtons[nextIdx].focus();
+        } else if (e.key === "ArrowLeft") {
+          var currentIdx = allButtons.indexOf(btn);
+          var prevIdx = (currentIdx - 1 + allButtons.length) % allButtons.length;
+          allButtons[prevIdx].focus();
+        }
+      });
+    });
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────
   // Simulate the WPE extension injecting firebolt-inject.js after a delay.
   // (Remove or adjust the timeout to test immediate availability.)
   // ──────────────────────────────────────────────────────────────────────────
-  // (function injectScriptAfterDelay() {
-  //  var delay = 3000; // 3 s — long enough to show several retry messages
-  //  setTimeout(function () {
-  //    var s = document.createElement("script");
-  //    s.src = "./firebolt-inject.js";
-  //    document.head.appendChild(s);
-  //  }, delay);
-  // })();
+  (function injectScriptAfterDelay() {
+   var delay = 3000; // 3 s — long enough to show several retry messages
+   setTimeout(function () {
+     var s = document.createElement("script");
+     s.src = "./firebolt-inject.js";
+     document.head.appendChild(s);
+   }, delay);
+  })();
 
   // ──────────────────────────────────────────────────────────────────────────
   // Mock transport
@@ -200,7 +334,19 @@
     "Discovery.watched":  { entityId: "mock-entity-123" },
     "Metrics.page":       { pageName: "MockHomePage" },
     "Metrics.error":      { errorType: "network" },
-    "Metrics.event":      { eventName: "mock-custom-event" }
+    "Metrics.event":      { eventName: "mock-custom-event" },
+    "Accessibility.onAudioDescriptionChanged":    { listen: true },
+    "Accessibility.onClosedCaptionsSettingsChanged": { listen: true },
+    "Accessibility.onHighContrastUIChanged":      { listen: true },
+    "Accessibility.onVoiceGuidanceSettingsChanged": { listen: true },
+    "Actions.onIntent":                           { listen: true },
+    "Device.onHdrChanged":                        { listen: true },
+    "Device.onDolbyAtmosExperienceAvailableChanged": { listen: true },
+    "Localization.onCountryChanged":              { listen: true },
+    "Localization.onPreferredAudioLanguagesChanged": { listen: true },
+    "Localization.onPresentationLanguageChanged": { listen: true },
+    "Network.onConnectedChanged":                 { listen: true },
+    "VideoOutput.onResolutionChanged":            { listen: true }
   };
 
   /**
@@ -423,14 +569,17 @@
     console.log("Test page script started.");
     log("Page loaded. Checking for window.FireboltServiceManager…", "log-info");
 
+    // Setup navigation buttons
+    setupNavigationButtons();
+
     console.log("FireboltServiceManager before wait: ");
     var fsm = await waitForFireboltServiceManager();
     console.log("FireboltServiceManager after wait: ");
     if (!fsm) { return; }
 
-    //var mockTransport = createMockTransport();
-    //fsm.transport(mockTransport);
-    //log("Mock transport configured (version " + fsm.version + ").", "log-info");
+    var mockTransport = createMockTransport();
+    fsm.transport(mockTransport);
+    log("Mock transport configured (version " + fsm.version + ").", "log-info");
 
     try {
       log("Calling FireboltServiceManager.get()…", "log-info");
