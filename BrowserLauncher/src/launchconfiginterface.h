@@ -72,5 +72,5 @@ public:
     virtual bool enableLifecycle2() const = 0;
     virtual bool memoryMonitorUseContainerMode() const = 0;
     virtual bool opportunisticSweepingAndGC() const = 0;
-    virtual bool wpeFireboltExtensionEnabled() const = 0;
+    virtual bool injectFireboltEndpoint() const = 0;
 };

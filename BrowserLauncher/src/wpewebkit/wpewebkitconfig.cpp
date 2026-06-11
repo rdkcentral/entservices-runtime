@@ -637,10 +637,12 @@ std::vector<std::string> WpeWebKitConfig::userScripts() const
         std::string script;
         std::stringstream scriptStream;
 
-        // Do not expose the firebolt endpoint if the extension is enabled, 
-        // as the extension will handle that and also it is not needed to expose 
-        // it to the window object in that case
-        if (!m_launchConfig->wpeFireboltExtensionEnabled())
+        // Do not expose the firebolt endpoint if the runtime is configured to disable it, 
+        // as that would be a security risk. Some legacy apps (e.g. Older firebolt 1.17.0) use the presence of 
+        // the endpoint to detect if they are running in a supported environment, 
+        // so we need to keep the endpoint present in those cases, 
+        // but just not expose the actual URL.
+        if (m_launchConfig->injectFireboltEndpoint())
         {
             const std::string fireboltEndpoint = m_launchConfig->fireboltEndpoint();
             if (!fireboltEndpoint.empty())
@@ -1040,7 +1042,6 @@ std::string WpeWebKitConfig::loadFailureErrorPage() const
 /*!
     Returns the firebolt-inject.js as a string content to be injected by the
     WPE Browser extension. 
-    This should only be used if wpeFireboltExtensionEnabled() returns true.
  */
 
 std::string WpeWebKitConfig::fireboltInjectScript() const

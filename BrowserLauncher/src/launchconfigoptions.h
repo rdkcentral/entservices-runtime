@@ -62,4 +62,4 @@
     macro(std::string, navigatorLanguage, {}, "")                       \
     macro(std::string, locale, {}, "")                                  \
     macro(std::string, fireboltEndpoint, {}, "")                        \
-    macro(bool, wpeFireboltExtensionEnabled, {true}, "Enable WPE Firebolt extension.")
+    macro(bool, injectFireboltEndpoint, {false}, "Inject Firebolt endpoint into the browser environment.")

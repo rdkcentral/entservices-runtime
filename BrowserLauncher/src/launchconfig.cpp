@@ -262,8 +262,16 @@ LaunchConfig::LaunchConfig(const std::string &configPath)
     if (const auto* endpoint = g_getenv("FIREBOLT_ENDPOINT"); endpoint != nullptr)
         m_fireboltEndpoint = endpoint;
 
-    if (const auto* wpeFireboltExtensionEnabledEnv = g_getenv("WPE_FIREBOLT_EXTENSION_ENABLED"); wpeFireboltExtensionEnabledEnv != nullptr)
-        m_wpeFireboltExtensionEnabled = (strcmp(wpeFireboltExtensionEnabledEnv, "true") == 0);
+    if (const auto* runtimeConfigEnv = g_getenv("RUNTIME_CONFIG_OVERRIDES_JSON"); runtimeConfigEnv != nullptr) {
+        g_info("Parsing runtime config overrides from RUNTIME_CONFIG_OVERRIDES_JSON environment variable.");
+        auto config = json::parse(runtimeConfigEnv, nullptr, false, true);
+        if (!config.is_discarded() && config.contains("injectFireboltEndpoint"))
+        {
+            m_injectFireboltEndpoint = config["injectFireboltEndpoint"].get<bool>();
+        } else {
+            g_warning("Failed to parse runtime config overrides from RUNTIME_CONFIG_OVERRIDES_JSON environment variable, or injectFireboltEndpoint field is missing. Value: %s", runtimeConfigEnv);
+        }
+    }
 
     if (const char* env = g_getenv("LANG"); env != nullptr)
     {
