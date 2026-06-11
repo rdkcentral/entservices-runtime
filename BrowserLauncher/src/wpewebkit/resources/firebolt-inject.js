@@ -5,168 +5,68 @@
   // ---------------------------------------------------------------------------
   // Private state
   // ---------------------------------------------------------------------------
-  var __transport = null;
+  var _transport = null;
+  var _transportSet = false;
   var _connecting = false;
   var _connected = false;
   var _fireboltInstance = null;
   var _connectionResolvers = [];
   var _nextId = 1;
-  var _pendingCalls = Object.create(null); // id → { isSubscribe, resolve, reject, [resultSchema] }
+  var _pendingCalls = Object.create(null); // id → { isSubscribe, resolve, reject }
   var _eventListeners = Object.create(null); // "Module.onEvent" → [callbacks]
-
-  // ---------------------------------------------------------------------------
-  // Schema validator
-  // ---------------------------------------------------------------------------
-  function _resolveRef(name) {
-    return _typeSchemas[name] || null;
-  }
-
-  function _validate(value, schema) {
-    if (!schema || schema.kind === "null") return null;
-    switch (schema.kind) {
-      case "primitive":   return _validatePrimitive(value, schema);
-      case "ref":         return _validate(value, _resolveRef(schema.name));
-      case "object":      return _validateObject(value, schema);
-      case "array":       return _validateArray(value, schema);
-      case "optional":    return (value === null || value === undefined) ? null : _validate(value, schema.inner);
-      case "union":       return _validateUnion(value, schema);
-      case "enum":        return _validateEnum(value, schema);
-      default:            return null;
-    }
-  }
-
-  function _validatePrimitive(value, schema) {
-    if (schema.type === "bool"   && typeof value !== "boolean") return "expected boolean, got " + typeof value;
-    if (schema.type === "string" && typeof value !== "string")  return "expected string, got " + typeof value;
-    if (schema.type === "number" && typeof value !== "number")  return "expected number, got " + typeof value;
-    if (schema.type === "string" && schema.constraints) {
-      var c = schema.constraints;
-      if (c.minLength !== undefined && value.length < c.minLength)
-        return "minLength violation: " + value.length + " < " + c.minLength;
-      if (c.maxLength !== undefined && value.length > c.maxLength)
-        return "maxLength violation: " + value.length + " > " + c.maxLength;
-      if (c.pattern !== undefined && !(new RegExp(c.pattern)).test(value))
-        return "pattern violation: " + c.pattern;
-    }
-    if ((schema.type === "number") && schema.constraints) {
-      var cn = schema.constraints;
-      if (cn.minimum !== undefined && value < cn.minimum)
-        return "minimum violation: " + value + " < " + cn.minimum;
-      if (cn.maximum !== undefined && value > cn.maximum)
-        return "maximum violation: " + value + " > " + cn.maximum;
-    }
-    return null;
-  }
-
-  function _validateObject(value, schema) {
-    if (typeof value !== "object" || value === null || Array.isArray(value))
-      return "expected object";
-    var required = schema.required || [];
-    for (var i = 0; i < required.length; i++) {
-      if (!(required[i] in value)) return required[i] + ": required field missing";
-    }
-    var props = schema.properties || {};
-    for (var key in props) {
-      if (key in value) {
-        var err = _validate(value[key], props[key]);
-        if (err) return key + ": " + err;
-      }
-    }
-    return null;
-  }
-
-  function _validateArray(value, schema) {
-    if (!Array.isArray(value)) return "expected array";
-    for (var i = 0; i < value.length; i++) {
-      var err = _validate(value[i], schema.items);
-      if (err) return "[" + i + "]: " + err;
-    }
-    return null;
-  }
-
-  function _validateUnion(value, schema) {
-    var variants = schema.variants || [];
-    for (var i = 0; i < variants.length; i++) {
-      if (_validate(value, variants[i]) === null) return null;
-    }
-    return "no union variant matched";
-  }
-
-  function _validateEnum(value, schema) {
-    var values = schema.values || [];
-    for (var i = 0; i < values.length; i++) {
-      if (value === values[i]) return null;
-    }
-    return "expected one of [" + values.join(", ") + "], got " + JSON.stringify(value);
-  }
 
   // --- Generated data ---
   var _VERSION = "9.0";
   
-  var _typeSchemas = {
-    "Accessibility.ClosedCaptionsSettings": {"kind":"object","properties":{"enabled":{"kind":"primitive","type":"bool"},"preferredLanguages":{"kind":"optional","inner":{"kind":"array","items":{"kind":"primitive","type":"string"}}}},"required":["enabled"]},
-    "Accessibility.VoiceGuidanceSettings": {"kind":"object","properties":{"enabled":{"kind":"primitive","type":"bool"},"rate":{"kind":"primitive","type":"number","constraints":{"minimum":0.1,"maximum":10}},"navigationHints":{"kind":"primitive","type":"bool"}},"required":["enabled","rate","navigationHints"]},
-    "Actions.IntentPayload": {"kind":"object","properties":{"intentId":{"kind":"primitive","type":"number"},"intent":{"kind":"primitive","type":"string"}},"required":["intentId","intent"]},
-    "Advertising.AdvertisingId": {"kind":"object","properties":{"ifa":{"kind":"primitive","type":"string"},"ifa_type":{"kind":"ref","name":"Advertising.IfaType"},"lmt":{"kind":"ref","name":"Advertising.Lmt"}},"required":["ifa","ifa_type","lmt"]},
-    "Advertising.IfaType": {"kind":"enum","values":["dpid","sspid","sessionid"]},
-    "Advertising.Lmt": {"kind":"enum","values":["0","1"]},
-    "Device.DeviceClass": {"kind":"enum","values":["ott","stb","tv"]},
-    "Device.HdrCapabilities": {"kind":"object","properties":{"hdr10":{"kind":"primitive","type":"bool"},"hdr10Plus":{"kind":"primitive","type":"bool"},"dolbyVision":{"kind":"primitive","type":"bool"},"hlg":{"kind":"primitive","type":"bool"}},"required":["hdr10","hdr10Plus","dolbyVision","hlg"]},
-    "Discovery.AgePolicy": {"kind":"enum","values":["app:adult","app:child","app:teen"]},
-    "Display.ColorimetryValue": {"kind":"enum","values":["SDR","HDR"]},
-    "Display.VideoResolution": {"kind":"enum","values":["1920x1080","3840x2160","7680x4320"]},
-    "Metrics.ErrorType": {"kind":"enum","values":["network","playback","entitlement","parse","aborted","unknown"]}
-  };
-  
   var _methodRegistry = {
-    "Accessibility.audioDescription": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"primitive","type":"bool"}},
-    "Accessibility.onAudioDescriptionChanged": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"primitive","type":"bool"}},
-    "Accessibility.closedCaptionsSettings": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"ref","name":"Accessibility.ClosedCaptionsSettings"}},
-    "Accessibility.onClosedCaptionsSettingsChanged": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"ref","name":"Accessibility.ClosedCaptionsSettings"}},
-    "Accessibility.highContrastUI": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"primitive","type":"bool"}},
-    "Accessibility.onHighContrastUIChanged": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"primitive","type":"bool"}},
-    "Accessibility.voiceGuidanceSettings": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"ref","name":"Accessibility.VoiceGuidanceSettings"}},
-    "Accessibility.onVoiceGuidanceSettingsChanged": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"ref","name":"Accessibility.VoiceGuidanceSettings"}},
-    "Actions.start": {"kind":"call","paramsSchema":{"kind":"object","properties":{"intent":{"kind":"primitive","type":"string"},"handlerAppId":{"kind":"optional","inner":{"kind":"primitive","type":"string"}}},"required":["intent"]},"resultSchema":{"kind":"null"}},
-    "Actions.intent": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"ref","name":"Actions.IntentPayload"}},
-    "Actions.onIntent": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"ref","name":"Actions.IntentPayload"}},
-    "Advertising.advertisingId": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"ref","name":"Advertising.AdvertisingId"}},
-    "Device.uid": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"primitive","type":"string"}},
-    "Device.deviceClass": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"ref","name":"Device.DeviceClass"}},
-    "Device.hdr": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"ref","name":"Device.HdrCapabilities"}},
-    "Device.onHdrChanged": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"ref","name":"Device.HdrCapabilities"}},
-    "Device.dolbyAtmosExperienceAvailable": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"primitive","type":"bool"}},
-    "Device.onDolbyAtmosExperienceAvailableChanged": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"primitive","type":"bool"}},
-    "Discovery.watched": {"kind":"call","paramsSchema":{"kind":"object","properties":{"entityId":{"kind":"primitive","type":"string"},"progress":{"kind":"optional","inner":{"kind":"primitive","type":"number"}},"completed":{"kind":"optional","inner":{"kind":"primitive","type":"bool"}},"watchedOn":{"kind":"optional","inner":{"kind":"primitive","type":"string"}},"agePolicy":{"kind":"optional","inner":{"kind":"ref","name":"Discovery.AgePolicy"}}},"required":["entityId"]},"resultSchema":{"kind":"null"}},
-    "Display.colorimetry": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"ref","name":"Display.ColorimetryValue"}},
-    "Display.videoResolutions": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"array","items":{"kind":"ref","name":"Display.VideoResolution"}}},
-    "Localization.country": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"primitive","type":"string","constraints":{"minLength":2,"maxLength":2,"pattern":"^[A-Z]{2}$"}}},
-    "Localization.onCountryChanged": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"primitive","type":"string","constraints":{"minLength":2,"maxLength":2,"pattern":"^[A-Z]{2}$"}}},
-    "Localization.preferredAudioLanguages": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"array","items":{"kind":"primitive","type":"string"}}},
-    "Localization.onPreferredAudioLanguagesChanged": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"array","items":{"kind":"primitive","type":"string"}}},
-    "Localization.presentationLanguage": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"primitive","type":"string"}},
-    "Localization.onPresentationLanguageChanged": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"primitive","type":"string"}},
-    "Metrics.ready": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"null"}},
-    "Metrics.startContent": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"null"}},
-    "Metrics.stopContent": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"null"}},
-    "Metrics.page": {"kind":"call","paramsSchema":{"kind":"object","properties":{"pageName":{"kind":"primitive","type":"string"}},"required":["pageName"]},"resultSchema":{"kind":"null"}},
-    "Metrics.error": {"kind":"call","paramsSchema":{"kind":"object","properties":{"errorType":{"kind":"ref","name":"Metrics.ErrorType"},"errorMessage":{"kind":"optional","inner":{"kind":"primitive","type":"string"}}},"required":["errorType"]},"resultSchema":{"kind":"null"}},
-    "Metrics.mediaLoadStart": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"null"}},
-    "Metrics.mediaPlay": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"null"}},
-    "Metrics.mediaPlaying": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"null"}},
-    "Metrics.mediaPause": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"null"}},
-    "Metrics.mediaWaiting": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"null"}},
-    "Metrics.mediaSeeking": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"null"}},
-    "Metrics.mediaSeeked": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"null"}},
-    "Metrics.mediaRateChanged": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"null"}},
-    "Metrics.mediaRenditionChanged": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"null"}},
-    "Metrics.mediaEnded": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"null"}},
-    "Metrics.event": {"kind":"call","paramsSchema":{"kind":"object","properties":{"eventName":{"kind":"primitive","type":"string"},"eventData":{"kind":"optional","inner":{"kind":"primitive","type":"string"}}},"required":["eventName"]},"resultSchema":{"kind":"null"}},
-    "Metrics.appInfo": {"kind":"call","paramsSchema":{"kind":"object","properties":{"agePolicy":{"kind":"optional","inner":{"kind":"ref","name":"Shared.AgePolicy"}}},"required":[]},"resultSchema":{"kind":"null"}},
-    "Network.connected": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"primitive","type":"bool"}},
-    "Network.onConnectedChanged": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"primitive","type":"bool"}},
-    "VideoOutput.resolution": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"ref","name":"VideoOutput.VideoResolution"}},
-    "VideoOutput.onResolutionChanged": {"kind":"call","paramsSchema":null,"resultSchema":{"kind":"ref","name":"VideoOutput.VideoResolution"}}
+    "Accessibility.audioDescription": {"kind":"call"},
+    "Accessibility.onAudioDescriptionChanged": {"kind":"subscribe","eventIsPrimitive":true},
+    "Accessibility.closedCaptionsSettings": {"kind":"call"},
+    "Accessibility.onClosedCaptionsSettingsChanged": {"kind":"subscribe","eventIsPrimitive":false},
+    "Accessibility.highContrastUI": {"kind":"call"},
+    "Accessibility.onHighContrastUIChanged": {"kind":"subscribe","eventIsPrimitive":true},
+    "Accessibility.voiceGuidanceSettings": {"kind":"call"},
+    "Accessibility.onVoiceGuidanceSettingsChanged": {"kind":"subscribe","eventIsPrimitive":false},
+    "Actions.start": {"kind":"call"},
+    "Actions.intent": {"kind":"call"},
+    "Actions.onIntent": {"kind":"subscribe","eventIsPrimitive":false},
+    "Advertising.advertisingId": {"kind":"call"},
+    "Device.uid": {"kind":"call"},
+    "Device.deviceClass": {"kind":"call"},
+    "Device.hdr": {"kind":"call"},
+    "Device.onHdrChanged": {"kind":"subscribe","eventIsPrimitive":false},
+    "Device.dolbyAtmosExperienceAvailable": {"kind":"call"},
+    "Device.onDolbyAtmosExperienceAvailableChanged": {"kind":"subscribe","eventIsPrimitive":true},
+    "Discovery.watched": {"kind":"call"},
+    "Display.colorimetry": {"kind":"call"},
+    "Display.videoResolutions": {"kind":"call"},
+    "Localization.country": {"kind":"call"},
+    "Localization.onCountryChanged": {"kind":"subscribe","eventIsPrimitive":true},
+    "Localization.preferredAudioLanguages": {"kind":"call"},
+    "Localization.onPreferredAudioLanguagesChanged": {"kind":"subscribe","eventIsPrimitive":false},
+    "Localization.presentationLanguage": {"kind":"call"},
+    "Localization.onPresentationLanguageChanged": {"kind":"subscribe","eventIsPrimitive":true},
+    "Metrics.ready": {"kind":"call"},
+    "Metrics.startContent": {"kind":"call"},
+    "Metrics.stopContent": {"kind":"call"},
+    "Metrics.page": {"kind":"call"},
+    "Metrics.error": {"kind":"call"},
+    "Metrics.mediaLoadStart": {"kind":"call"},
+    "Metrics.mediaPlay": {"kind":"call"},
+    "Metrics.mediaPlaying": {"kind":"call"},
+    "Metrics.mediaPause": {"kind":"call"},
+    "Metrics.mediaWaiting": {"kind":"call"},
+    "Metrics.mediaSeeking": {"kind":"call"},
+    "Metrics.mediaSeeked": {"kind":"call"},
+    "Metrics.mediaRateChanged": {"kind":"call"},
+    "Metrics.mediaRenditionChanged": {"kind":"call"},
+    "Metrics.mediaEnded": {"kind":"call"},
+    "Metrics.event": {"kind":"call"},
+    "Metrics.appInfo": {"kind":"call"},
+    "Network.connected": {"kind":"call"},
+    "Network.onConnectedChanged": {"kind":"subscribe","eventIsPrimitive":true},
+    "VideoOutput.resolution": {"kind":"call"},
+    "VideoOutput.onResolutionChanged": {"kind":"subscribe","eventIsPrimitive":true}
   };
   
   // --- End generated data ---
@@ -176,20 +76,7 @@
   // ---------------------------------------------------------------------------
   function _onMessage(raw) {
     var message;
-
-    // if raw is string, parse as JSON-RPC; otherwise ignore (could be non-JSON message from transport)
-    if (typeof raw === "string") {
-      console.log("Received message: " + raw);
-      try { 
-        message = JSON.parse(raw); 
-      } catch (e) {
-        console.log("Failed to parse message: " + raw);
-        return;
-      }
-    } else if (typeof raw === "object") {
-      console.log("Received non-string message: ", JSON.stringify(raw));
-      message = raw;
-    }
+    try { message = JSON.parse(raw); } catch (e) { return; }
 
     // Has id → call response or subscribe ack
     if (message.id !== undefined) {
@@ -217,14 +104,7 @@
         return;
       }
 
-      // Regular call response — validate result
-      if (pending.resultSchema) {
-        var valErr = _validate(message.result, pending.resultSchema);
-        if (valErr) {
-          pending.reject(new Error("Invalid result from " + pending.methodName + ": " + valErr));
-          return;
-        }
-      }
+      // Regular call response
       pending.resolve(message.result);
       return;
     }
@@ -239,14 +119,6 @@
         ? (message.params ? message.params.value : undefined)
         : message.params;
 
-      if (entry.eventSchema) {
-        var evErr = _validate(payload, entry.eventSchema);
-        if (evErr) {
-          console.warn("Firebolt: invalid event payload for " + eventName + ": " + evErr);
-          return;
-        }
-      }
-
       var cbs = _eventListeners[eventName];
       if (cbs) {
         for (var i = 0; i < cbs.length; i++) { cbs[i](payload); }
@@ -255,7 +127,6 @@
   }
 
   function _onStatus(status) {
-    console.log("Transport status changed: " + status);
     _connected = (status === "connected");
     if (_connected) {
       if (!_fireboltInstance) { _fireboltInstance = _buildFireboltInstance(); }
@@ -265,24 +136,15 @@
   }
 
   function _rpcCall(methodName, params) {
-    var entry = _methodRegistry[methodName];
-    if (entry && entry.paramsSchema) {
-      var pErr = _validate(params, entry.paramsSchema);
-      if (pErr) return Promise.reject(new Error("Invalid params for " + methodName + ": " + pErr));
-    }
     return new Promise(function (resolve, reject) {
       var id = _nextId++;
-      var t = __transport;
       _pendingCalls[id] = {
         isSubscribe: false,
-        methodName: methodName,
-        resultSchema: entry ? entry.resultSchema : null,
         resolve: resolve,
         reject: reject,
       };
       var msg = JSON.stringify({ jsonrpc: "2.0", id: id, method: methodName, params: params || {} });
-      console.log("Sending message: " + msg);
-      var result = t.send(msg);
+      var result = _transport.send(msg);
       if (!result.success) {
         delete _pendingCalls[id];
         reject(new Error("Transport send failed (errorCode: " + result.errorCode + ")"));
@@ -296,7 +158,6 @@
 
     return new Promise(function (resolve, reject) {
       var id = _nextId++;
-      var t = __transport;
 
       function unsubscribeFn() {
         var ls = _eventListeners[eventName];
@@ -308,7 +169,7 @@
           var unsubId = _nextId++;
           _pendingCalls[unsubId] = { isSubscribe: true, eventName: eventName, callback: null, unsubscribeFn: null, resolve: function(){}, reject: function(){} };
           var unsubMsg = JSON.stringify({ jsonrpc: "2.0", id: unsubId, method: eventName, params: { listen: false } });
-          t.send(unsubMsg);
+          _transport.send(unsubMsg);
         }
       }
 
@@ -322,9 +183,8 @@
       };
 
       var msg = JSON.stringify({ jsonrpc: "2.0", id: id, method: eventName, params: { listen: true } });
-      var result = t.send(msg);
+      var result = _transport.send(msg);
       if (!result.success) {
-        console.warn("Transport send failed (errorCode: " + result.errorCode + ")");
         delete _pendingCalls[id];
         var ls = _eventListeners[eventName];
         if (ls) { var i = ls.indexOf(callback); if (i !== -1) ls.splice(i, 1); }
@@ -365,60 +225,78 @@
     }
     var client = Object.create(null);
     for (var mod in modules) { client[mod] = Object.freeze(modules[mod]); }
+    // Add disconnect method
+    client.disconnect = function() {
+      _disconnect();
+      _fireboltInstance = null;
+    };
     return Object.freeze(client);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Disconnect handler
+  // ---------------------------------------------------------------------------
+  function _disconnect() {
+    // Call transport disconnect
+    if (_transport && _transport.disconnect) {
+      _transport.disconnect();
+    }
+    // Clear event listeners
+    for (var key in _eventListeners) {
+      _eventListeners[key] = [];
+    }
+    // Reject all pending calls with DisconnectError
+    for (var id in _pendingCalls) {
+      var pending = _pendingCalls[id];
+      pending.reject(new Error("Disconnected"));
+    }
+    _pendingCalls = Object.create(null);
+    // Clear pending connection resolvers
+    _connectionResolvers = [];
+    // Reset state
+    _connected = false;
+    _connecting = false;
+    _fireboltInstance = null;
   }
 
   // ---------------------------------------------------------------------------
   // configure / get
   // ---------------------------------------------------------------------------
-  function _transport(transport) {
-    console.log("Configuring FireboltServiceManager with transport: ");
-    if (typeof transport === "object") {
-      console.log("transport is an object");
-      // check if transport has required methods individually to provide better error messages
-      if (typeof transport.connect !== "function") {
-        console.warn("Transport object is missing required method: connect");
-        return;
-      }
-      if (typeof transport.send !== "function") {
-        console.warn("Transport object is missing required method: send");
-        return;
-      }
-      if (typeof transport.onMessage !== "function") {
-        console.warn("Transport object is missing required method: onMessage");
-        return;
-      }
-      if (typeof transport.onConnectionStatus !== "function") {
-        console.warn("Transport object is missing required method: onConnectionStatus");
-        return;
-      }
-
-    } else {
-      console.warn("Invalid transport passed to FireboltServiceManager.configure: ", transport);
+  function _setTransport(transport) {
+    if (_transportSet) {
+      throw new Error("Transport already set on FireboltServiceManager");
     }
-    __transport = transport;
+    
+    // Validate that transport has all required methods
+    var requiredMethods = ["send", "onMessage", "onConnectionStatus", "connect", "disconnect"];
+    for (var i = 0; i < requiredMethods.length; i++) {
+      var method = requiredMethods[i];
+      if (typeof transport[method] !== "function") {
+        throw new Error(
+          "Transport object must have a '" + method + "' method. " +
+          "Missing or invalid method: " + method
+        );
+      }
+    }
+    
+    _transport = transport;
+    _transportSet = true;
   }
 
   function _get() {
-    if (!__transport) {
+    if (!_transport) {
       throw new Error(
-        "FireboltServiceManager.get() called before configure(). " +
-        "The WPE extension must call configure({ clientId }) first."
+        "Transport not set via FireboltServiceManager.transport(). " +
+        "The WPE extension must call FireboltServiceManager.transport(t) first."
       );
     }
-    console.log("FireboltServiceManager.get() called");
     if (_connected && _fireboltInstance) { return Promise.resolve(_fireboltInstance); }
     var p = new Promise(function (resolve) { _connectionResolvers.push(resolve); });
     if (!_connecting) {
-      console.log("Initiating transport connection...");
       _connecting = true;
-      var t = __transport;
-      console.log("Registering transport onMessage` callback...");
-      t.onMessage(_onMessage);
-      console.log("Registering transport onConnectionStatus callback...");
-      t.onConnectionStatus(_onStatus);
-      console.log("Calling transport.connect()...");
-      t.connect();
+      _transport.onMessage(_onMessage);
+      _transport.onConnectionStatus(_onStatus);
+      _transport.connect();
     }
     return p;
   }
@@ -426,7 +304,7 @@
 
   var _fsm = Object.freeze({
     version: _VERSION,
-    transport: _transport,
+    transport: _setTransport,
     get: _get,
   });
   Object.defineProperty(global, "FireboltServiceManager", {
