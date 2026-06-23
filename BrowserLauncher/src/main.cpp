@@ -206,6 +206,8 @@ int main(int argc, char *argv[])
         g_option_context_free (context);
         if (!url)
             url = g_strdup("file://" DEFAULT_LOCAL_FILE_DIR "/index.html");
+        if (!configPath)
+            configPath = g_strdup(DEFAULT_LOCAL_FILE_DIR "/rdk.config");
     }
 
     g_message("starting BrowserLauncher v" BROWSER_LAUNCHER_VERSION ", package url %s", url);
