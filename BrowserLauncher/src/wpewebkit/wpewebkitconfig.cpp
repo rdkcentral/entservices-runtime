@@ -22,6 +22,7 @@
 #include <unistd.h>
 #include <sys/sysinfo.h>
 
+#include <array>
 #include <regex>
 #include <bit>
 #include <set>
@@ -72,6 +73,33 @@ void prependLdLibraryPath(const std::string& value, const bool replace = true)
         ldLibPath += std::string(":") + envLdLibPath;
 
     setEnvVar("LD_LIBRARY_PATH", ldLibPath, replace);
+}
+
+std::string findLibrary(const std::string& runtimeDir, const std::string& fileName)
+{
+    std::error_code ignore;
+    const auto searchPaths = std::to_array<fs::path>({
+        // '/runtime/usr/libexec/rdk-browserlauncher/../../lib/<file>'
+        fs::weakly_canonical(fs::path(runtimeDir) / ".." / ".." / "lib", ignore) / fileName,
+        // '/runtime/wpewebkit/lib/<file>'
+        fs::path(runtimeDir) / "wpewebkit" / "lib" / fileName,
+#if GLIB_SIZEOF_VOID_P == 8
+        // '/usr/lib64/<file>'
+        fs::path("/usr/lib64") / fileName,
+#endif
+        // '/usr/lib/<file>'
+        fs::path("/usr/lib") / fileName
+    });
+    for (const auto& path : searchPaths)
+    {
+        if (fs::exists(path, ignore))
+        {
+            auto ret = path.string();
+            g_debug("path found: %s", ret.c_str());
+            return ret;
+        }
+    }
+    return {};
 }
 
 } // namespace
@@ -256,7 +284,7 @@ uint WpeWebKitConfig::getCpusAllowed()
     Sets the platform specific environment variables mainly for gstreamer. This
     function is not called if Rialto is enabled.
  */
-void WpeWebKitConfig::setGStreamerEnvironment()
+void WpeWebKitConfig::setGStreamerEnvironment() const
 {
     enum class Platform {
         Unknown,
@@ -316,13 +344,12 @@ void WpeWebKitConfig::setGStreamerEnvironment()
 
 /*!
     \internal
-    \static
 
     Sets up an isolated environment for Rialto. Exposes minimal set of
     GStreamer plugins from the device; overrides OCDM implementation.
 
  */
-bool WpeWebKitConfig::setRialtoEnvironment()
+bool WpeWebKitConfig::setRialtoEnvironment() const
 {
     std::string tmpDir = ([]{
         std::string result;
@@ -378,7 +405,7 @@ bool WpeWebKitConfig::setRialtoEnvironment()
     for (const std::string &pluginFileName : plugins)
     {
         std::error_code ec;
-        const std::string sysPath = "/usr/lib/gstreamer-1.0/" + pluginFileName;
+        const std::string sysPath = findLibrary(m_launchConfig->runtimeDir(), std::string("gstreamer-1.0/") + pluginFileName);
         const std::string newPath = pluginsDir + "/" + pluginFileName;
         if (!fs::exists(sysPath, ec))
         {
@@ -400,12 +427,12 @@ bool WpeWebKitConfig::setRialtoEnvironment()
         }
     }
 
-    for (const std::string libFileName : {"libocdm.so.2", "libocdm.so.4"})
+    for (const std::string libFileName : {"libocdm.so.4","libocdm.so.2"})
     {
         std::error_code ec;
-        const std::string sysPath = "/usr/lib/" + libFileName;
+        const std::string sysPath = findLibrary(m_launchConfig->runtimeDir(), libFileName);
         const std::string newPath = libsDir + "/" + libFileName;
-        const std::string ocdmRialtoPath = "/usr/lib/libocdmRialto.so.1";
+        const std::string ocdmRialtoPath = findLibrary(m_launchConfig->runtimeDir(), "libocdmRialto.so.1");
         if (!fs::exists(sysPath, ec))
         {
             continue;
@@ -457,24 +484,15 @@ void WpeWebKitConfig::setEnvironment() const
     const char* backendName = m_launchConfig->isHeadless()
                                   ? "libWPEBackend-headless.so"
                                   : "libWPEBackend-default.so";
-    fs::path widgetBackend = fs::path(m_launchConfig->runtimeDir()) / "usr/lib" / backendName;
-    fs::path systemBackend = fs::path("/usr/lib") / backendName;
 
-    std::error_code ec;
-    if (fs::exists(widgetBackend, ec))
+    if (auto backend = findLibrary(m_launchConfig->runtimeDir(), backendName); !backend.empty())
     {
-        setEnvVar("WPE_BACKEND_LIBRARY", widgetBackend.string(), true);
-    }
-    else if (fs::exists(systemBackend, ec))
-    {
-        setEnvVar("WPE_BACKEND_LIBRARY", systemBackend.string(), true);
+        setEnvVar("WPE_BACKEND_LIBRARY", backend, false);
+        g_message("WPE_BACKEND_LIBRARY = %s", g_getenv("WPE_BACKEND_LIBRARY"));
     }
     else
     {
-        g_warning("WPE backend library %s not found in %s or %s",
-                  backendName,
-                  widgetBackend.string().c_str(),
-                  systemBackend.string().c_str());
+        g_warning("WPE backend library %s not found", backendName);
     }
 
     if (!m_launchConfig->isHeadless())
