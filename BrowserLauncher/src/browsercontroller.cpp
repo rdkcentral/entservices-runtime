@@ -18,8 +18,34 @@
  */
 #include "browsercontroller.h"
 
+#include <nlohmann/json.hpp>
+
 #include <glib.h>
 #include <gio/gio.h>
+
+using json = nlohmann::json;
+
+namespace Firebolt
+{
+
+struct Intent
+{
+    std::string action;
+    struct {
+        std::string source;
+    } context;
+};
+
+void from_json(const json& j, Intent& i)
+{
+    if (!j.is_discarded() && j.is_object())
+    {
+        j.at("action").get_to(i.action);
+        j.at("context").at("source").get_to(i.context.source);
+    }
+}
+
+}  // namespace Firebolt
 
 BrowserController::BrowserController(BrowserInterface *impl,
                                      std::shared_ptr<LaunchConfigInterface> launchConfig,
@@ -45,7 +71,8 @@ void BrowserController::launch()
     m_browser->onClose.connect(std::bind(&BrowserController::onBrowserClose, this, std::placeholders::_1));
 
     // launch the browser
-    if (!m_browser->launch(m_launchConfig)) {
+    if (!m_browser->launch(m_launchConfig))
+    {
         g_message("Couldn't launch browser");
         g_application_quit(g_application_get_default());
         return;
@@ -64,7 +91,7 @@ void BrowserController::launch()
         Firebolt::IFireboltAccessor::Instance().Connect(cfg, [this](const bool connected, const Firebolt::Error code) {
             if (!connected)
             {
-                g_message("Firebolt disconnected, code = %d", code);
+                g_message("Firebolt disconnected, code = %d", static_cast<int32_t>(code));
                 return;
             }
             if (!m_connectJob.joinable())
@@ -103,6 +130,31 @@ void BrowserController::onFireboltConnected()
 {
     using namespace Firebolt;
 
+    // get launch intent
+    {
+        auto &actions = Firebolt::IFireboltAccessor::Instance().ActionsInterface();
+        Result<SubscriptionId> result = actions.subscribeOnIntent([this](const std::string& intent){
+            m_mainRunLoop->InvokeTask([this, intent = std::string{intent}]() {
+                onIntent(intent);
+            });
+        });
+        if (!result)
+        {
+            g_warning("actions.subscribeOnIntent failed, error code = %d", static_cast<int32_t>(result.error()));
+        }
+        Result<std::string> intent = actions.intent();
+        if (!intent)
+        {
+            g_warning("actions.intent failed, error code = %d", static_cast<int32_t>(intent.error()));
+        }
+        else
+        {
+            m_mainRunLoop->InvokeTask([this, intent = std::string{intent.value()}]() {
+                onIntent(intent);
+            });
+        }
+    }
+
     // subscribe to lifecycle state change events
     {
         auto &presentation = Firebolt::IFireboltAccessor::Instance().PresentationInterface();
@@ -113,7 +165,7 @@ void BrowserController::onFireboltConnected()
         });
         if (!result)
         {
-            g_warning("presentation.subscribeOnFocusedChanged failed, error code = %d", result.error());
+            g_warning("presentation.subscribeOnFocusedChanged failed, error code = %d", static_cast<int32_t>(result.error()));
         }
         auto &lifecycle = Firebolt::IFireboltAccessor::Instance().LifecycleInterface();
         result = lifecycle.subscribeOnStateChanged([this](const std::vector<Lifecycle::StateChange>& changes) {
@@ -123,7 +175,7 @@ void BrowserController::onFireboltConnected()
         });
         if (!result)
         {
-            g_warning("lifecycle.subscribeOnStateChanged failed, error code = %d", result.error());
+            g_warning("lifecycle.subscribeOnStateChanged failed, error code = %d", static_cast<int32_t>(result.error()));
         }
     }
 
@@ -137,12 +189,12 @@ void BrowserController::onFireboltConnected()
         });
         if (!result)
         {
-            g_warning("device.subscribeOnHdrChanged failed, error code = %d", result.error());
+            g_warning("device.subscribeOnHdrChanged failed, error code = %d", static_cast<int32_t>(result.error()));
         }
         Result<Device::HDRFormat> hdrFormat = device.hdr();
         if (!hdrFormat)
         {
-            g_warning("device.hdr failed, error code = %d", hdrFormat.error());
+            g_warning("device.hdr failed, error code = %d", static_cast<int32_t>(hdrFormat.error()));
         }
         else
         {
@@ -167,7 +219,7 @@ void BrowserController::onBrowserClose(CloseReason reason)
             auto result = lifecycle.close(Firebolt::Lifecycle::CloseType::DEACTIVATE);
             if (!result)
             {
-                g_critical("Lifecycle.close(deactivate) failed, error: %d", result.error());
+                g_critical("Lifecycle.close(deactivate) failed, error: %d", static_cast<int32_t>(result.error()));
                 break;
             }
             return;  // keep the browser running
@@ -189,13 +241,28 @@ void BrowserController::onLifecycleStateChanged(std::vector<Firebolt::Lifecycle:
 {
     g_assert(g_main_context_is_owner (g_main_context_default()));
 
-    auto toPageSate = [](Firebolt::Lifecycle::LifecycleState state, bool focused) {
+    auto toPageSate = [](Firebolt::Lifecycle::LifecycleState state, Firebolt::Lifecycle::LifecycleState oldState, bool isPreloading, bool focused) {
         switch(state)
         {
             case Firebolt::Lifecycle::LifecycleState::ACTIVE:
+                if (isPreloading)
+                {
+                    g_warning("lifecycle state changed to 'ACTIVE' with pre-load intent.");
+                }
                 return focused ? PageLifecycleState::ACTIVE : PageLifecycleState::PASSIVE;
             case Firebolt::Lifecycle::LifecycleState::PAUSED:
-                return PageLifecycleState::HIDDEN;
+                switch(oldState)
+                {
+                    case Firebolt::Lifecycle::LifecycleState::SUSPENDED:
+                    case Firebolt::Lifecycle::LifecycleState::INITIALIZING:
+                        if (!isPreloading)
+                        {
+                            return PageLifecycleState::PASSIVE;
+                        }
+                        [[fallthrough]];
+                    default:
+                        return PageLifecycleState::HIDDEN;
+                }
             case Firebolt::Lifecycle::LifecycleState::SUSPENDED:
             case Firebolt::Lifecycle::LifecycleState::HIBERNATED:
                 return PageLifecycleState::FROZEN;
@@ -215,7 +282,7 @@ void BrowserController::onLifecycleStateChanged(std::vector<Firebolt::Lifecycle:
                   static_cast<unsigned>(change.newState),
                   static_cast<unsigned>(change.oldState));
         m_lifecycleState = change.newState;
-        m_browser->setState(toPageSate(change.newState, m_isFocused));
+        m_browser->setState(toPageSate(change.newState, change.oldState, m_isPreloading, m_isFocused));
     }
 }
 
@@ -245,4 +312,36 @@ void BrowserController::onHdrFormatChanged(Firebolt::Device::HDRFormat hdrFormat
         hdrFormat.hlg;
 
     m_browser->setScreenSupportsHDR(supportsHdr);
+}
+
+void BrowserController::onIntent(const std::string& intentStr)
+{
+    g_assert(g_main_context_is_owner (g_main_context_default()));
+
+    g_message("intent = %s", intentStr.c_str());
+
+    try
+    {
+        // Try parsing 'pre-load' intent as defined in
+        // https://wiki.rdkcentral.com/spaces/WG/pages/433962733/RDK8+Firebolt%C2%AE+Intents+Specification#RDK8Firebolt%C2%AEIntentsSpecification-Pre-loadactiontype
+        const char kPreloadAction[] = "pre-load";
+        const auto intentJson = json::parse(intentStr, nullptr, false, true);
+        const auto intent = intentJson.at("intent").get<Firebolt::Intent>();
+        g_message("intent action = %s, source = %s", intent.action.c_str(), intent.context.source.c_str());
+        m_isPreloading = (0 == g_ascii_strncasecmp(intent.action.c_str(), kPreloadAction, strlen(kPreloadAction)));
+    }
+    catch (const json::parse_error& e)
+    {
+        g_warning("failed to parse intent. %s", e.what());
+        m_isPreloading = false;
+    }
+
+    if (!m_isPreloading)
+    {
+        if (m_lifecycleState == Firebolt::Lifecycle::LifecycleState::PAUSED)
+        {
+            g_message("setting page lifecycle state to 'PASSIVE' on intent change");
+            m_browser->setState(PageLifecycleState::PASSIVE);
+        }
+    }
 }
