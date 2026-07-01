@@ -25,7 +25,7 @@
 namespace {
 
 // Convert Firebolt Lifecycle 2.0 state string to W3C Page Lifecycle string
-static std::string toPageLifecycleState(LifecycleState fireboltState, bool focused)
+static std::string toPageLifecycleState(LifecycleState fireboltState, bool focused, bool preloading)
 {
     if (focused)
     {
@@ -39,7 +39,7 @@ static std::string toPageLifecycleState(LifecycleState fireboltState, bool focus
     }
     else if (fireboltState == LifecycleState::PAUSED)
     {
-        return "hidden";
+        return preloading ? "hidden" : "passive";
     }
     else if (fireboltState == LifecycleState::SUSPENDED || fireboltState == LifecycleState::HIBERNATED)
     {
@@ -160,11 +160,12 @@ TEST_P(LifecycleStateTest, SunnyDay)
         // NB: browser starts in 'hidden' state, we need to adjust firebolt state
         // to keep the test in sync with browser
         bool focused = false;
+        bool preloading = true;
         const auto oldState = LifecycleState::INITIALIZING;
         const auto newState = LifecycleState::PAUSED;
-        const std::string pageState = toPageLifecycleState(newState, focused);
+        const std::string pageState = toPageLifecycleState(newState, focused, preloading);
 
-        changeLifecycleStateState(oldState, newState, focused);
+        changeLifecycleStateState(oldState, newState, focused, preloading);
 
         bool timed_out = !runUntil([this, pageState] {
             return _test_connection != nullptr && _page_state == pageState;
@@ -198,11 +199,12 @@ TEST_P(LifecycleStateTest, SunnyDay)
         const auto oldState = std::get<0>(transition);
         const auto newState = std::get<1>(transition);
         const bool focused = std::get<2>(transition);
-        const std::string pageState = toPageLifecycleState(newState, focused);
+        const bool preloading = false;
+        const std::string pageState = toPageLifecycleState(newState, focused, preloading);
 
         EXPECT_EQ (_current_lc_state, oldState);
 
-        changeLifecycleStateState(oldState, newState, focused);
+        changeLifecycleStateState(oldState, newState, focused, preloading);
 
         bool timed_out = !runUntil([this, pageState] {
             g_message("page state: %s, target: %s", _page_state.c_str(), pageState.c_str());
@@ -236,11 +238,12 @@ TEST_P(LifecycleStateTest, LaunchToActive)
     // change firebolt lifecycle state and wait for web page to connect and report intial state
     {
         bool focused = true;
+        bool preloading = false;
         const auto oldState = LifecycleState::INITIALIZING;
         const auto newState = LifecycleState::ACTIVE;
-        const std::string pageState = toPageLifecycleState(newState, focused);
+        const std::string pageState = toPageLifecycleState(newState, focused, preloading);
 
-        changeLifecycleStateState(oldState, newState, focused);
+        changeLifecycleStateState(oldState, newState, focused, preloading);
 
         bool timed_out = !runUntil([this, pageState] {
             return _test_connection != nullptr && _page_state == pageState;
@@ -282,12 +285,13 @@ TEST_P(LifecycleStateTest, ResumeToActive)
 
     // first move browser to frozen state
     bool focused = false;
+    bool preloading = true;
     auto oldState = LifecycleState::INITIALIZING;
     for (const auto newState : {LifecycleState::PAUSED, LifecycleState::SUSPENDED} )
     {
-        const std::string pageState = toPageLifecycleState(newState, focused);
+        const std::string pageState = toPageLifecycleState(newState, focused, preloading);
 
-        changeLifecycleStateState(oldState, newState, focused);
+        changeLifecycleStateState(oldState, newState, focused, preloading);
 
         bool timed_out = !runUntil([this, pageState] {
             return _test_connection != nullptr && _page_state == pageState;
@@ -302,10 +306,11 @@ TEST_P(LifecycleStateTest, ResumeToActive)
     // next resume to active
     {
         focused = true;
+        preloading = false;
         const auto newState = LifecycleState::ACTIVE;
-        const std::string pageState = toPageLifecycleState(newState, focused);
+        const std::string pageState = toPageLifecycleState(newState, focused, preloading);
 
-        changeLifecycleStateState(oldState, newState, focused);
+        changeLifecycleStateState(oldState, newState, focused, preloading);
 
         bool timed_out = !runUntil([this, pageState] {
             return _test_connection != nullptr && _page_state == pageState;
@@ -349,13 +354,14 @@ TEST_P(LifecycleStateTest, FirstFrameOnLoad)
     EXPECT_EQ(_state_change_listeners.size(), 1);
 
     bool focused = false;
+    bool preloading = true;
     auto oldState = LifecycleState::INITIALIZING;
     auto newState = LifecycleState::PAUSED;
 
     // expected at least one frame rendered in hidden state
     {
-        const std::string pageState = toPageLifecycleState(newState, focused);
-        changeLifecycleStateState(oldState, newState, focused);
+        const std::string pageState = toPageLifecycleState(newState, focused, preloading);
+        changeLifecycleStateState(oldState, newState, focused, preloading);
         bool timed_out = !runUntil([this, pageState] {
             return _test_connection != nullptr && _page_state == pageState && _first_frame_ts != -1;
         }, 3s);
@@ -403,13 +409,14 @@ TEST_P(LifecycleStateTest, FirstFrameOnResume)
     EXPECT_EQ(_state_change_listeners.size(), 1);
 
     bool focused = false;
+    bool preloading = false;
     auto oldState = LifecycleState::INITIALIZING;
 
     // expected at least one frame rendered
     for (const auto newState : {LifecycleState::PAUSED, LifecycleState::ACTIVE} )
     {
-        const std::string pageState = toPageLifecycleState(newState, focused);
-        changeLifecycleStateState(oldState, newState, focused);
+        const std::string pageState = toPageLifecycleState(newState, focused, preloading);
+        changeLifecycleStateState(oldState, newState, focused, preloading);
         bool timed_out = !runUntil([this, pageState] {
             return _test_connection != nullptr && _page_state == pageState && _first_frame_ts != -1;
         }, 3s);
@@ -426,8 +433,8 @@ TEST_P(LifecycleStateTest, FirstFrameOnResume)
         // TODO: reset first frame rendered flag
         const auto newState = LifecycleState::SUSPENDED;
 
-        const std::string pageState = toPageLifecycleState(newState, focused);
-        changeLifecycleStateState(oldState, newState, focused);
+        const std::string pageState = toPageLifecycleState(newState, focused, preloading);
+        changeLifecycleStateState(oldState, newState, focused, preloading);
         bool timed_out = !runUntil([this, pageState] {
             return _test_connection != nullptr && _page_state == pageState;
         }, 1s);
@@ -443,14 +450,15 @@ TEST_P(LifecycleStateTest, FirstFrameOnResume)
         return false;
     }, 500ms, 500ms);
 
-
     // back to hidden, expected at least one frame rendered
+    preloading = true;
+
     {
         const auto newState = LifecycleState::PAUSED;
 
         auto prevFrameCount = _frame_count;
-        const std::string pageState = toPageLifecycleState(newState, focused);
-        changeLifecycleStateState(oldState, newState, focused);
+        const std::string pageState = toPageLifecycleState(newState, focused, preloading);
+        changeLifecycleStateState(oldState, newState, focused, preloading);
         bool timed_out = !runUntil([this, pageState, prevFrameCount] {
             return _test_connection != nullptr && _page_state == pageState && prevFrameCount != _frame_count;
         }, 1s);
@@ -498,13 +506,14 @@ TEST_P(LifecycleStateTest, FirstFrameWhileHidden)
     EXPECT_EQ(_state_change_listeners.size(), 1);
 
     bool focused = false;
+    bool preloading = true;
     auto oldState = LifecycleState::INITIALIZING;
 
     // expected least one frame rendered in hidden state
     {
         const auto newState = LifecycleState::PAUSED;
-        const std::string pageState = toPageLifecycleState(newState, focused);
-        changeLifecycleStateState(oldState, newState, focused);
+        const std::string pageState = toPageLifecycleState(newState, focused, preloading);
+        changeLifecycleStateState(oldState, newState, focused, preloading);
         bool timed_out = !runUntil([this, pageState] {
             return _test_connection != nullptr && _page_state == pageState && _first_frame_ts != -1;
         }, 3s);
@@ -526,8 +535,8 @@ TEST_P(LifecycleStateTest, FirstFrameWhileHidden)
         // TODO: reset first frame rendered flag
         const auto newState = LifecycleState::SUSPENDED;
 
-        const std::string pageState = toPageLifecycleState(newState, focused);
-        changeLifecycleStateState(oldState, newState, focused);
+        const std::string pageState = toPageLifecycleState(newState, focused, preloading);
+        changeLifecycleStateState(oldState, newState, focused, preloading);
         bool timed_out = !runUntil([this, pageState] {
             return _test_connection != nullptr && _page_state == pageState;
         }, 1s);
@@ -548,8 +557,8 @@ TEST_P(LifecycleStateTest, FirstFrameWhileHidden)
         const auto newState = LifecycleState::PAUSED;
 
         auto prevFrameCount = _frame_count;
-        const std::string pageState = toPageLifecycleState(newState, focused);
-        changeLifecycleStateState(oldState, newState, focused);
+        const std::string pageState = toPageLifecycleState(newState, focused, preloading);
+        changeLifecycleStateState(oldState, newState, focused, preloading);
         bool timed_out = !runUntil([this, pageState, prevFrameCount] {
             return _test_connection != nullptr && _page_state == pageState && prevFrameCount != _frame_count;
         }, 1s);
@@ -594,9 +603,10 @@ TEST_P(LifecycleStateTest, WindowClose)
     // change firebolt lifecycle state and wait for web page to connect and report intial state
     {
         bool focused = true;
+        bool preloading = false;
         const auto oldState = LifecycleState::INITIALIZING;
         const auto newState = LifecycleState::ACTIVE;
-        const std::string pageState = toPageLifecycleState(newState, focused);
+        const std::string pageState = toPageLifecycleState(newState, focused, preloading);
 
         changeLifecycleStateState(oldState, newState, focused);
 
@@ -638,11 +648,12 @@ TEST_P(LifecycleStateTest, WindowMinimize)
     // change firebolt lifecycle state and wait for web page to connect and report intial state
     {
         bool focused = true;
+        bool preloading = false;
         const auto oldState = LifecycleState::INITIALIZING;
         const auto newState = LifecycleState::ACTIVE;
-        const std::string pageState = toPageLifecycleState(newState, focused);
+        const std::string pageState = toPageLifecycleState(newState, focused, preloading);
 
-        changeLifecycleStateState(oldState, newState, focused);
+        changeLifecycleStateState(oldState, newState, focused, preloading);
 
         bool timed_out = !runUntil([this, pageState] {
             return _test_connection != nullptr && _page_state == pageState;

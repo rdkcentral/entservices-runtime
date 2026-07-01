@@ -55,6 +55,12 @@ enum class LifecycleState
     TERMINATING  = 0x5
 };
 
+enum class IntentType
+{
+    EMPTY,
+    PRELOAD
+};
+
 std::ostream& operator<<(std::ostream& out, const LifecycleState&);
 
 class BrowserLauncherTest : public ::testing::Test
@@ -93,6 +99,8 @@ protected:
     LifecycleState _current_lc_state { LifecycleState::INITIALIZING };
     std::string _close_type { };
     bool _focused { false };
+    IntentType _intent { IntentType::PRELOAD };
+    int32_t _intent_id { 0 };
 
     WstCompositor* _compositor { nullptr };
     EssCtx *_ess_ctx { nullptr };
@@ -116,7 +124,9 @@ protected:
     virtual void onTestMessage(const json& message) { }
     virtual void onConnectionClosed(SoupWebsocketConnection *connection);
 
-    void changeLifecycleStateState(LifecycleState oldState, LifecycleState newState, bool focused = false);
+    bool isPreloading() const { return _intent == IntentType::PRELOAD; }
+    void changeIntent(const IntentType intent);
+    void changeLifecycleStateState(LifecycleState oldState, LifecycleState newState, bool focused = false, bool preloading = false);
     void sendFireboltMessage(const json& message) { sendMessage(_firebolt_connection, message); }
     void sendTestMessage(const json& message) { sendMessage(_test_connection, message); }
     void launchBrowser(const std::string& url, std::vector<std::string> args = { });

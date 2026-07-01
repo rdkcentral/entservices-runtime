@@ -71,6 +71,18 @@ std::string toString(LifecycleState state)
     return "unknown";
 }
 
+json intentJson(IntentType intent_type, const int32_t intentId = 0)
+{
+    switch(intent_type)
+    {
+        case IntentType::PRELOAD:
+            return {{"intent",{{"action","pre-load"},{"context",{{"source","system"}}}}},{"intentId",intentId}};
+        case IntentType::EMPTY:
+        default:
+            return {{"intent",""},{"intentId",intentId}};
+    }
+}
+
 }  // namespace
 
 std::ostream& operator<<(std::ostream& out, const LifecycleState& state) {
@@ -276,12 +288,31 @@ void BrowserLauncherTest::onMessage(SoupWebsocketConnection *connection, const s
     }
 }
 
-void BrowserLauncherTest::changeLifecycleStateState(LifecycleState oldState, LifecycleState newState, bool focused)
+void BrowserLauncherTest::changeIntent(const IntentType intent)
+{
+    if (_intent != intent)
+    {
+        _intent = intent;
+        json message = {
+            {"jsonrpc", "2.0"},
+            {"method", "Actions.onIntent"},
+            {"params", intentJson(_intent, _intent_id++)}
+        };
+        sendFireboltMessage(message);
+    }
+}
+
+void BrowserLauncherTest::changeLifecycleStateState(LifecycleState oldState, LifecycleState newState, bool focused, bool preloading)
 {
     std::string oldStateStr = toString(oldState);
     std::string newStateStr = toString(newState);
 
-    g_message("changeLifecycleStateState: oldState=%s, newState=%s, focused=%c", oldStateStr.c_str(), newStateStr.c_str(), focused ? 'y' : 'n');
+    g_message("changeLifecycleStateState: oldState=%s, newState=%s, focused=%c, preloading=%c", oldStateStr.c_str(), newStateStr.c_str(), focused ? 'y' : 'n', preloading ? 'y' : 'n');
+
+    if (isPreloading() != preloading)
+    {
+        changeIntent(preloading ? IntentType::PRELOAD : IntentType::EMPTY);
+    }
 
     if (_current_lc_state != newState)
     {
@@ -392,6 +423,28 @@ void BrowserLauncherTest::onFireboltMessage(const json& message)
             {"jsonrpc", "2.0"},
             {"id", id},
             {"result", _focused}
+        };
+        sendFireboltMessage(result);
+    }
+    else if (method == "Actions.onIntent")
+    {
+        auto params = message["params"];
+        EXPECT_FALSE(params.is_discarded());
+        EXPECT_TRUE(params.contains("listen"));
+        bool listen = params["listen"].get<bool>();
+        json result = {
+            {"jsonrpc", "2.0"},
+            {"id", id},
+            {"result", {{"listening",listen},{"event",method}}}
+        };
+        sendFireboltMessage(result);
+    }
+    else if (method == "Actions.intent")
+    {
+        json result = {
+            {"jsonrpc", "2.0"},
+            {"id", id},
+            {"result", intentJson(_intent, _intent_id)}
         };
         sendFireboltMessage(result);
     }

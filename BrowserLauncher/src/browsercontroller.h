@@ -45,12 +45,14 @@ private:
     void onLifecycleStateChanged(std::vector<Firebolt::Lifecycle::StateChange>);
     void onFocusedChanged(bool);
     void onHdrFormatChanged(Firebolt::Device::HDRFormat hdr_format);
+    void onIntent(const std::string& intent);
 
     BrowserInterface * const m_browser;
     std::shared_ptr<LaunchConfigInterface> m_launchConfig;
     std::string m_packageUrl;
 
     bool m_isFocused { false };
+    bool m_isPreloading { false };
     Firebolt::Lifecycle::LifecycleState m_lifecycleState { Firebolt::Lifecycle::LifecycleState::INITIALIZING };
     std::unique_ptr<RunLoop> m_mainRunLoop;
     std::jthread m_connectJob;
