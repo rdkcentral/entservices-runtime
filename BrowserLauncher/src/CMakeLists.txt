@@ -17,8 +17,6 @@
 
 set( BROWSER_LAUNCHER_VERSION "0.0.0" CACHE STRING "The version string to display in the logs" )
 
-# Disable exceptions
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-exceptions")
 # Enable warnings
 add_compile_options( -Wall -Wno-psabi )
 

@@ -154,7 +154,7 @@ TEST_P(HdrSupportTest, InitialHdrSetting)
     if (HasFatalFailure())
         return;
 
-    changeLifecycleStateState(LifecycleState::INITIALIZING, LifecycleState::ACTIVE, true);
+    changeLifecycleStateState(LifecycleState::INITIALIZING, LifecycleState::ACTIVE, true, false);
 
     unsigned id = _req_id++;
     json req = {
@@ -200,7 +200,7 @@ TEST_P(HdrSupportTest, HdrSettingChange)
         EXPECT_FALSE(timed_out) << "timed out waiting for browser launcher";
     }
 
-    changeLifecycleStateState(LifecycleState::INITIALIZING, LifecycleState::ACTIVE, true);
+    changeLifecycleStateState(LifecycleState::INITIALIZING, LifecycleState::ACTIVE, true, false);
 
     for (int i = 0; i < 2; ++i)
     {
@@ -280,7 +280,7 @@ TEST_P(DecodingInfoTest, CodecSupport)
     if (HasFatalFailure())
         return;
 
-    changeLifecycleStateState(LifecycleState::INITIALIZING, LifecycleState::ACTIVE, true);
+    changeLifecycleStateState(LifecycleState::INITIALIZING, LifecycleState::ACTIVE, true, false);
 
     unsigned id = _req_id++;
     json req = {
@@ -384,7 +384,7 @@ std::vector<DecodingInfoTestConfig> GetDecodingInfoTestConfigs() {
             ._type = "media-source",
             ._audio = {
                 {
-                    ._content_type = "audio/mp4;codecs=\"mp4a.40.1\"",
+                    ._content_type = "audio/mp4;codecs=\"mp4a.40.2\"",
                     ._channels = "2"
                 }
             }
