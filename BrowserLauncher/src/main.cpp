@@ -84,10 +84,11 @@ static void preLoadWPE(const std::string& runtimeDir)
     {
         for (const auto& version : webkitVersions)
         {
-            gchar_ptr execDir {g_build_filename(runtimeDir.c_str(), rpathOrigin, "libexec", version.c_str(), nullptr)};
+            gchar_ptr webkitDir {g_canonicalize_filename(rpathOrigin, runtimeDir.c_str())};
+            gchar_ptr execDir {g_build_filename(webkitDir.get(), "libexec", version.c_str(), nullptr)};
             if (g_file_test(execDir.get(), G_FILE_TEST_EXISTS))
             {
-                gchar_ptr libDir { g_build_filename(runtimeDir.c_str(), rpathOrigin, "lib", nullptr) };
+                gchar_ptr libDir { g_build_filename(webkitDir.get(), "lib", nullptr) };
                 gchar_ptr bundleDir { g_build_filename(libDir.get(), version.c_str(), "injected-bundle", nullptr) };
                 gchar_ptr webkitLibFilePattern { g_strdup_printf("%s/%s", libDir.get(), "libWPEWebKit-[0-9]*.so.*") };
                 if (!preLoadLib(webkitLibFilePattern.get()))
@@ -206,6 +207,8 @@ int main(int argc, char *argv[])
         g_option_context_free (context);
         if (!url)
             url = g_strdup("file://" DEFAULT_LOCAL_FILE_DIR "/index.html");
+        if (!configPath)
+            configPath = g_strdup(DEFAULT_LOCAL_FILE_DIR "/rdk.config");
     }
 
     g_message("starting BrowserLauncher v" BROWSER_LAUNCHER_VERSION ", package url %s", url);

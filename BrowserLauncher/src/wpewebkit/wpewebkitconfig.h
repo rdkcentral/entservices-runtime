@@ -132,9 +132,9 @@ private:
 
     static uint getCpusAllowed();
 
-    static void setGStreamerEnvironment();
+    void setGStreamerEnvironment() const;
 
-    static bool setRialtoEnvironment();
+    bool setRialtoEnvironment() const;
 
 private:
     std::shared_ptr<const LaunchConfigInterface> m_launchConfig;
