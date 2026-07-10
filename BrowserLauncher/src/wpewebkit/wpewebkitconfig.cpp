@@ -406,6 +406,7 @@ bool WpeWebKitConfig::setRialtoEnvironment() const
         "libgstaudiomixer.so",
         "libgstgio.so",
         "libgstinterleave.so",
+        "libgstlibav.so",
     };
 
     for (const std::string &pluginFileName : plugins)
