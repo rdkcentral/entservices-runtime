@@ -325,12 +325,12 @@ void BrowserController::onIntent(const std::string& intentStr)
         // Try parsing 'pre-load' intent as defined in
         // https://wiki.rdkcentral.com/spaces/WG/pages/433962733/RDK8+Firebolt%C2%AE+Intents+Specification#RDK8Firebolt%C2%AEIntentsSpecification-Pre-loadactiontype
         const char kPreloadAction[] = "pre-load";
-        const auto intentJson = json::parse(intentStr, nullptr, false, true);
+        const auto intentJson = json::parse(intentStr);
         const auto intent = intentJson.at("intent").get<Firebolt::Intent>();
         g_message("intent action = %s, source = %s", intent.action.c_str(), intent.context.source.c_str());
         m_isPreloading = (0 == g_ascii_strncasecmp(intent.action.c_str(), kPreloadAction, strlen(kPreloadAction)));
     }
-    catch (const json::parse_error& e)
+    catch (const json::exception& e)
     {
         g_warning("failed to parse intent. %s", e.what());
         m_isPreloading = false;
