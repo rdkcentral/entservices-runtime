@@ -33,7 +33,7 @@ git clone --branch R4.4.6 https://github.com/rdkcentral/Thunder.git
 
 git clone --branch develop https://github.com/rdkcentral/entservices-apis.git
 
-git clone https://github.com/rdkcentral/entservices-testframework.git
+git clone --branch feature/RDKEMW-22169 https://github.com/rdkcentral/entservices-testframework.git
 
 ############################
 # Build Thunder-Tools
