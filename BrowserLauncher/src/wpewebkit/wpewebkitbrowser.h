@@ -57,6 +57,8 @@ private:
     const unsigned m_hangPollIntervalSecs;
     int m_maxUnresponsiveTimeSecs;
     uint32_t m_unresponsivePingNum;
+    bool m_isFrozen { false };
+    bool m_terminationInitiated { false };
     bool m_unloading { false };
 
     std::unique_ptr<WpeWebKitView> m_mainView;

@@ -149,6 +149,14 @@ bool WpeWebKitBrowser::setState(PageLifecycleState state)
 
     g_message("setState: state=%s(0x%x)", toString(state), static_cast<unsigned>(state));
 
+    if (m_isFrozen && state != PageLifecycleState::FROZEN)
+    {
+        g_message("setState: resuming from FROZEN, resetting unresponsive ping counter");
+        m_unresponsivePingNum = 0;
+    }
+
+    m_isFrozen = (state == PageLifecycleState::FROZEN);
+
     m_mainView->setState(state);
 
     if (state == PageLifecycleState::TERMINATED)
@@ -229,6 +237,8 @@ void WpeWebKitBrowser::onBrowserUnresponsive(
     // check if the browser has been unresponsive for too long
     if (secsSinceLastResponsive > m_maxUnresponsiveTimeSecs)
     {
+        m_terminationInitiated = true;
+
         g_critical("browser (pid %d) has been unresponsive for too long, terminating",
                   webProcessPid);
 
@@ -252,24 +262,25 @@ void WpeWebKitBrowser::onBrowserUnresponsive(
 
 int WpeWebKitBrowser::checkBrowserResponsiveness()
 {
-    if (!m_mainView)
+    if (!m_mainView || m_terminationInitiated)
         return G_SOURCE_REMOVE;
 
-    const bool isResponsive = m_mainView->checkResponsive();
-    g_info("check browser responsiveness : %s", isResponsive ? "true" : "false");
+    m_mainView->checkResponsiveAsync([this](bool isResponsive) {
+        g_info("check browser responsiveness : %s", isResponsive ? "true" : "false");
 
-    if (isResponsive)
-    {
-        m_unresponsivePingNum = 0;
-    }
-    else
-    {
-        ++m_unresponsivePingNum;
+        if (isResponsive)
+        {
+            m_unresponsivePingNum = 0;
+        }
+        else
+        {
+            ++m_unresponsivePingNum;
 
-        const uint32_t secsUnresponsive = m_unresponsivePingNum * m_hangPollIntervalSecs;
-        const int webProcessPid = m_mainView->getWebProcessIdentifier();
-        onBrowserUnresponsive(secsUnresponsive, webProcessPid);
-    }
+            const uint32_t secsUnresponsive = m_unresponsivePingNum * m_hangPollIntervalSecs;
+            const int webProcessPid = m_mainView->getWebProcessIdentifier();
+            onBrowserUnresponsive(secsUnresponsive, webProcessPid);
+        }
+    });
 
     return G_SOURCE_CONTINUE;
 
