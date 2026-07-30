@@ -647,6 +647,8 @@ WpeWebKitView::WpeWebKitView(const std::shared_ptr<const WpeWebKitConfig> &confi
     , m_view(nullptr)
     , m_webProcessPid(-1)
     , m_unresponsiveReplies(0)
+    , m_webProcessCheckInProgress(false)
+    , m_responsivenessCancellable(g_cancellable_new())
 {
     g_info("constructing the main WpeWebKitView");
 }
@@ -658,6 +660,11 @@ WpeWebKitView::~WpeWebKitView()
 #if defined(ENABLE_TESTING)
     m_testRunner.reset();
 #endif
+
+    // Cancel any in-flight responsiveness check before destroying the view,
+    // so the async callback won't dereference a freed WpeWebKitView*.
+    g_cancellable_cancel(m_responsivenessCancellable);
+    g_clear_object(&m_responsivenessCancellable);
 
     m_pageLifecycle.reset();
 
@@ -1120,40 +1127,97 @@ bool WpeWebKitView::tryClose()
 }
 
 /*!
-    Checks if the main web process is still responding.
+    Asynchronously checks if the main web process is still responding.
  */
-bool WpeWebKitView::checkResponsive()
+void WpeWebKitView::checkResponsiveAsync(std::function<void(bool)> onComplete)
 {
     if (!m_view)
     {
         g_warning("unexpectedly we don't have a valid WPE view object");
-        return true;
+        return;
     }
 
-    bool isResponsive = (webkit_web_view_get_is_web_process_responsive(m_view) == TRUE);
-
-    if (!isResponsive || (m_unresponsiveReplies > 0))
+    if (m_webProcessCheckInProgress)
     {
-        const char* uriPtr = webkit_web_view_get_uri(m_view);
+        g_info("responsiveness check already in progress, skipping");
+        return;
+    }
+
+    m_webProcessCheckInProgress = true;
+    m_responsivenessOnComplete = std::move(onComplete);
+
+    g_cancellable_reset(m_responsivenessCancellable);
+
+    webkit_web_view_is_web_process_responsive_async(
+        m_view,
+        m_responsivenessCancellable,
+        &WpeWebKitView::isWebProcessResponsiveAsyncCallback,
+        this);
+}
+
+/*!
+    \internal
+    \static
+
+    Completion callback for webkit_web_view_is_web_process_responsive_async().
+    Owns all counter and logging state for the responsiveness check.
+ */
+void WpeWebKitView::isWebProcessResponsiveAsyncCallback(GObject *sourceObject,
+                                                        GAsyncResult *result,
+                                                        gpointer userData)
+{
+    auto self = reinterpret_cast<WpeWebKitView*>(userData);
+    WebKitWebView *webView = WEBKIT_WEB_VIEW(sourceObject);
+
+    GError *error = nullptr;
+    const gboolean isResponsive =
+        webkit_web_view_is_web_process_responsive_finish(webView, result, &error);
+
+    if (error)
+    {
+        // If cancelled (e.g. during destruction) bail out without touching self.
+        if (g_error_matches(error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+        {
+            g_info("responsiveness check cancelled");
+            g_error_free(error);
+            return;
+        }
+        g_warning("responsiveness check error: %s", error->message);
+        g_error_free(error);
+        self->m_responsivenessOnComplete = {};
+        self->m_webProcessCheckInProgress = false;
+        return;
+    }
+
+    g_assert(self && (self->m_view == webView));
+    self->m_webProcessCheckInProgress = false;
+
+    if (self->m_webProcessPid < 1)
+        self->m_webProcessPid = webkit_web_view_get_web_process_identifier(webView);
+
+    if (!isResponsive || (self->m_unresponsiveReplies > 0))
+    {
+        const char* uriPtr = webkit_web_view_get_uri(webView);
         const std::string activeURL = uriPtr ? uriPtr : "";
 
         if (isResponsive)
         {
             g_critical("WebProcess recovered after %d unresponsive replies, url=%s",
-                      m_unresponsiveReplies, activeURL.c_str());
-
-            m_unresponsiveReplies = 0;
+                      self->m_unresponsiveReplies, activeURL.c_str());
+            self->m_unresponsiveReplies = 0;
         }
         else
         {
-            m_unresponsiveReplies++;
-
+            self->m_unresponsiveReplies++;
             g_critical("WebProcess is unresponsive, reply num=%d, url=%s",
-                      m_unresponsiveReplies, activeURL.c_str());
+                      self->m_unresponsiveReplies, activeURL.c_str());
         }
     }
 
-    return isResponsive;
+    auto onComplete = std::move(self->m_responsivenessOnComplete);
+    self->m_responsivenessOnComplete = {};
+    if (onComplete)
+        onComplete(isResponsive);
 }
 
 /*!
@@ -1459,13 +1523,13 @@ void WpeWebKitView::webProcessTerminatedCallback(WebKitWebView *,
     self->m_callbacks.processTerminated();
 }
 
-
 /*!
     \internal
     \static
 
-    Notification callback, typically indicates the web process is now responsive
-    again.
+    Notification callback, fires on actual state transitions. This is a
+    lightweight handler that only calls notifyResponsive() on recovery.
+    All counter and logging state is owned exclusively by the async callback.
 
  */
 void WpeWebKitView::isWebProcessResponsiveCallback(WebKitWebView *webView,
@@ -1477,26 +1541,14 @@ void WpeWebKitView::isWebProcessResponsiveCallback(WebKitWebView *webView,
     auto self = reinterpret_cast<WpeWebKitView*>(userData);
     g_assert(self && (self->m_view == webView));
 
-    if (self->m_webProcessPid < 1)
-    {
-        self->m_webProcessPid = webkit_web_view_get_web_process_identifier(webView);
-    }
-
     if (webkit_web_view_get_is_web_process_responsive(webView) == TRUE)
     {
-        if (self->m_unresponsiveReplies > 0)
-        {
-            g_message("WebProcess recovered after %d unresponsive replies, url=%s",
-                  self->m_unresponsiveReplies, webkit_web_view_get_uri(webView));
-
-            self->m_unresponsiveReplies = 0;
-        }
-
+        g_debug("received 'notify::is-web-process-responsive' recovery transition");
         self->m_callbacks.notifyResponsive();
     }
     else
     {
-        g_warning("WebProcess is currently unresponsive");
+        g_debug("received 'notify::is-web-process-responsive' unresponsive transition");
     }
 }
 
