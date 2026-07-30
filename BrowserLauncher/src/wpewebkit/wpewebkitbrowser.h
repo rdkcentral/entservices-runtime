@@ -26,6 +26,7 @@
 #include <optional>
 
 typedef struct _GMainContext GMainContext;
+typedef struct _GSource GSource;
 class WpeWebKitView;
 class BridgeObjectImpl;
 
@@ -48,6 +49,8 @@ private:
     void onBrowserUnresponsive(int64_t secsSinceLastResponsive, int webProcessPid);
     void invokeOnMainThreadLoop(std::function<void()> call, std::optional<uint32_t> delay = {});
     int  checkBrowserResponsiveness();
+    void startHangTimer();
+    void stopHangTimer();
 
 private:
     GMainContext *m_mainThreadContext { nullptr };
@@ -57,6 +60,7 @@ private:
     const unsigned m_hangPollIntervalSecs;
     int m_maxUnresponsiveTimeSecs;
     uint32_t m_unresponsivePingNum;
+    GSource* m_hangTimerSource { nullptr };
     bool m_unloading { false };
 
     std::unique_ptr<WpeWebKitView> m_mainView;

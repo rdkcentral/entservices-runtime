@@ -110,17 +110,39 @@ bool WpeWebKitBrowser::launch(const std::shared_ptr<const LaunchConfigInterface>
         return false;
     }
 
-    GSource *hangTimerSource = g_timeout_source_new_seconds(m_hangPollIntervalSecs);
-    g_source_set_callback(hangTimerSource, G_SOURCE_FUNC(+[](WpeWebKitBrowser* self) {
+    startHangTimer();
+    return true;
+}
+
+void WpeWebKitBrowser::startHangTimer()
+{
+    if (m_hangTimerSource)
+        return;
+
+    m_unresponsivePingNum = 0;
+
+    m_hangTimerSource = g_timeout_source_new_seconds(m_hangPollIntervalSecs);
+    g_source_set_callback(m_hangTimerSource, G_SOURCE_FUNC(+[](WpeWebKitBrowser* self) {
         return self->checkBrowserResponsiveness();
     }), this, nullptr);
-    g_source_attach(hangTimerSource, g_main_context_get_thread_default());
-    g_source_unref(hangTimerSource);
-    return true;
+    g_source_attach(m_hangTimerSource, g_main_context_get_thread_default());
+}
+
+void WpeWebKitBrowser::stopHangTimer()
+{
+    if (!m_hangTimerSource)
+        return;
+
+    if (!g_source_is_destroyed(m_hangTimerSource))
+        g_source_destroy(m_hangTimerSource);
+    g_source_unref(m_hangTimerSource);
+    m_hangTimerSource = nullptr;
 }
 
 void WpeWebKitBrowser::dispose()
 {
+    stopHangTimer();
+
     // Destroy web view
     g_message("dispose: destroying browser view");
     m_mainView.reset();
@@ -148,6 +170,15 @@ bool WpeWebKitBrowser::setState(PageLifecycleState state)
     }
 
     g_message("setState: state=%s(0x%x)", toString(state), static_cast<unsigned>(state));
+
+    if (state == PageLifecycleState::FROZEN)
+    {
+        stopHangTimer();
+    }
+    else
+    {
+        startHangTimer();
+    }
 
     m_mainView->setState(state);
 
@@ -229,6 +260,8 @@ void WpeWebKitBrowser::onBrowserUnresponsive(
     // check if the browser has been unresponsive for too long
     if (secsSinceLastResponsive > m_maxUnresponsiveTimeSecs)
     {
+        stopHangTimer();
+
         g_critical("browser (pid %d) has been unresponsive for too long, terminating",
                   webProcessPid);
 
@@ -255,21 +288,25 @@ int WpeWebKitBrowser::checkBrowserResponsiveness()
     if (!m_mainView)
         return G_SOURCE_REMOVE;
 
-    const bool isResponsive = m_mainView->checkResponsive();
-    g_info("check browser responsiveness : %s", isResponsive ? "true" : "false");
+    m_mainView->checkResponsiveAsync([this](bool isResponsive) {
+        if (!m_hangTimerSource)
+            return;
 
-    if (isResponsive)
-    {
-        m_unresponsivePingNum = 0;
-    }
-    else
-    {
-        ++m_unresponsivePingNum;
+        g_info("check browser responsiveness : %s", isResponsive ? "true" : "false");
 
-        const uint32_t secsUnresponsive = m_unresponsivePingNum * m_hangPollIntervalSecs;
-        const int webProcessPid = m_mainView->getWebProcessIdentifier();
-        onBrowserUnresponsive(secsUnresponsive, webProcessPid);
-    }
+        if (isResponsive)
+        {
+            m_unresponsivePingNum = 0;
+        }
+        else
+        {
+            ++m_unresponsivePingNum;
+
+            const uint32_t secsUnresponsive = m_unresponsivePingNum * m_hangPollIntervalSecs;
+            const int webProcessPid = m_mainView->getWebProcessIdentifier();
+            onBrowserUnresponsive(secsUnresponsive, webProcessPid);
+        }
+    });
 
     return G_SOURCE_CONTINUE;
 
