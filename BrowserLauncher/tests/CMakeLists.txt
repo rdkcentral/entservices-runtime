@@ -32,6 +32,7 @@ add_executable(
     browserlauncher_test.h
     browserlauncher_test.cc
     lifecycle_tests.cc
+    malformed_intent_tests.cc
     media_capabilities_tests.cc
     $<TARGET_OBJECTS:tests_resourcebundle>
 )
