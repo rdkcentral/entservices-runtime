@@ -57,7 +57,7 @@ public:
     bool loadUrl(const std::string &url);
     bool setState(PageLifecycleState state);
     bool tryClose();
-    bool checkResponsive();
+    void checkResponsiveAsync(std::function<void(bool)> onComplete);
     pid_t getWebProcessIdentifier() const;
     bool runJavaScript(const std::string &js);
     void setScreenSupportsHDR(bool enable);
@@ -113,6 +113,10 @@ private:
                                                GParamSpec *paramSpec,
                                                void *userData);
 
+    static void isWebProcessResponsiveAsyncCallback(GObject *sourceObject,
+                                                    GAsyncResult *result,
+                                                    gpointer userData);
+
     static gboolean userMessageReceivedCallback(WebKitWebView *webView,
                                                 WebKitUserMessage *message,
                                                 void *userData);
@@ -129,7 +133,9 @@ private:
     int m_unresponsiveReplies;
 
     std::unique_ptr<WpePageLifecycleDelegate> m_pageLifecycle;
-
+    bool m_webProcessCheckInProgress;
+    GCancellable* m_responsivenessCancellable;
+    std::function<void(bool)> m_responsivenessOnComplete;
 #if defined(ENABLE_TESTING)
     std::unique_ptr<Testing::TestRunner> m_testRunner;
 #endif

@@ -2542,6 +2542,9 @@ static GSourceFuncs _handlerIntervention =
                     _context,
                     [](gpointer customdata) -> gboolean {
                         WebKitImplementation* object = static_cast<WebKitImplementation*>(customdata);
+                        // Reset ping counter before resuming to prevent false watchdog kill
+                        // from stale unresponsive reply counts accumulated while frozen.
+                        object->_unresponsiveReplyNum = 0;
 #ifdef WEBKIT_GLIB_API
                         webkit_web_view_resume(object->_view);
 #else
