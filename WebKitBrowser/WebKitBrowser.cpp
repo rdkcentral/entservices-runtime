@@ -37,6 +37,14 @@ namespace {
         // Controls
         {}
     );
+
+    // Both arguments must be Core::Directory normalized: the guaranteed trailing '/'
+    // is what makes this a directory boundary check and not a plain string prefix.
+    bool IsInsideStorage(const string& normalizedPath, const string& normalizedRoot)
+    {
+        return ((normalizedPath.empty() == false) && (normalizedRoot.empty() == false) &&
+                (normalizedPath.compare(0, normalizedRoot.length(), normalizedRoot) == 0));
+    }
 }
 
 namespace Plugin {
@@ -279,8 +287,19 @@ namespace Plugin {
         uint32_t result = Core::ERROR_NONE;
 
         if (path.empty() == false) {
-            string fullPath = _persistentStoragePath + path;
-            Core::Directory dir(fullPath.c_str());
+            const string fullPath = _persistentStoragePath + path;
+
+            // Core::Directory normalizes in its constructor, and normalization resolves
+            // ".." instead of rejecting it, so confine the normalized form up front.
+            const string normalizedPath = Core::Directory::Normalize(fullPath);
+            const string normalizedRoot = Core::Directory::Normalize(_persistentStoragePath);
+
+            if (IsInsideStorage(normalizedPath, normalizedRoot) == false) {
+                TRACE(Trace::Error, (_T("Refusing to delete %s: outside of %s\n"), fullPath.c_str(), _persistentStoragePath.c_str()));
+                return Core::ERROR_GENERAL;
+            }
+
+            Core::Directory dir(normalizedPath.c_str());
             if (!dir.Destroy(true)) {
                 TRACE(Trace::Error, (_T("Failed to delete %s\n"), fullPath.c_str()));
                 result = Core::ERROR_GENERAL;
