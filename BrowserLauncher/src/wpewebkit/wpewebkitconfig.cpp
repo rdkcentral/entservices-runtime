@@ -174,6 +174,10 @@ bool WpeWebKitConfig::initExtensionDir()
     if (m_launchConfig->enableConsoleLog())
         extensions.insert("libLogExtension.so");
 
+    // firebolt extension enabled based on config
+    if (m_launchConfig->enableFireboltExtension())
+        extensions.insert("libFireboltExtension.so");
+
     std::string extDirectory = m_launchConfig->runtimeDir() + "/wpewebkit/extensions";
 
     // symlink the extensions
