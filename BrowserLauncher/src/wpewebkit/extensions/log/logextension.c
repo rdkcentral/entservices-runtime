@@ -92,9 +92,11 @@ static void logToConsole(WebKitConsoleMessageLevel level, const char *fileName,
     }
     n++;
 
+    // Kept in the scope of the writev() below, which is what reads it back.
+    char fbuf[156];
+
     if (fileName)
     {
-        char fbuf[156];
         iov[n].iov_base = (void *) fbuf;
         iov[n].iov_len = snprintf(fbuf, sizeof(fbuf), "< S:%.*s L:%u > ",
                                   64, fileName ?: "?",
