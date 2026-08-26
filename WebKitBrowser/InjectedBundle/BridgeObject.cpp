@@ -100,7 +100,8 @@ static JSStringRef B64WKStringToJSString(WKStringRef str)
 #endif
         g_free(tmp);
       }
-      else if (decoded[decodedLen] != '\0') {
+      else {
+        // g_base64_decode() does not guarantee a terminator, JSStringCreateWithUTF8CString() needs one.
         gchar *tmp = decoded;
         decoded = g_strndup (tmp, decodedLen);
         g_free(tmp);
