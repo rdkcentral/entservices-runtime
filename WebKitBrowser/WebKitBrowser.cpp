@@ -23,7 +23,7 @@
 #define API_VERSION_NUMBER_MINOR 1
 #define API_VERSION_NUMBER_PATCH 16
 
-namespace WPEFramework {
+namespace Thunder {
 
 namespace {
 
@@ -79,7 +79,7 @@ namespace Plugin {
                     _browser->Register(&_notification);
 
                     const RPC::IRemoteConnection *connection = _service->RemoteConnection(_connectionId);
-                    _memory = WPEFramework::WebKitBrowser::MemoryObserver(connection);
+                    _memory = Thunder::WebKitBrowser::MemoryObserver(connection);
                     ASSERT(_memory != nullptr);
                     if (connection != nullptr) {
                         connection->Release();
@@ -228,11 +228,11 @@ namespace Plugin {
 
             if (request.Verb == Web::Request::HTTP_GET) {
                 bool visible = false;
-                static_cast<const WPEFramework::Exchange::IApplication*>(_application)->Visible(visible);
+                static_cast<const Thunder::Exchange::IApplication*>(_application)->Visible(visible);
                 PluginHost::IStateControl::state currentState = stateControl->State();
                 Core::ProxyType<Web::JSONBodyType<WebKitBrowser::Data>> body(_jsonBodyDataFactory.Element());
                 string url;
-                static_cast<const WPEFramework::Exchange::IWebBrowser*>(_browser)->URL(url);
+                static_cast<const Thunder::Exchange::IWebBrowser*>(_browser)->URL(url);
                 body->URL = url;
                 uint8_t fps = 0;
                 _browser->FPS(fps);
@@ -522,4 +522,4 @@ namespace WebKitBrowser {
 
 
 
-}  // WPEFramework
+}  // Thunder

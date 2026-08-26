@@ -24,7 +24,7 @@
 #include <memory>
 #include "UtilsLogging.h"
 
-using namespace WPEFramework;
+using namespace Thunder;
 
 namespace Utils {
     namespace Synchro {
@@ -43,9 +43,9 @@ namespace Utils {
         template <class C> std::recursive_mutex ApiLocks<C>::mtx;
 
         template <typename METHOD, typename REALOBJECT>
-        std::function<uint32_t(REALOBJECT*, const WPEFramework::Core::JSON::VariantContainer&, WPEFramework::Core::JSON::VariantContainer&)>
+        std::function<uint32_t(REALOBJECT*, const Thunder::Core::JSON::VariantContainer&, Thunder::Core::JSON::VariantContainer&)>
         getFunctionToCall(const std::string& debugname, const METHOD& method, REALOBJECT* objectPtr) {
-            return [debugname, method](REALOBJECT *obj, const WPEFramework::Core::JSON::VariantContainer& in, WPEFramework::Core::JSON::VariantContainer& out) -> uint32_t {
+            return [debugname, method](REALOBJECT *obj, const Thunder::Core::JSON::VariantContainer& in, Thunder::Core::JSON::VariantContainer& out) -> uint32_t {
                 isThreadUsingLockedApi = true;
                 // printf("METHOD CALL, GETTING LOCK: REALOBJECT '%s', method: '%s' MUTEX:%p\n",typeid(REALOBJECT).name(), debugname.c_str(), &ApiLocks<REALOBJECT>::mtx); fflush(stdout);
                 std::lock_guard<std::recursive_mutex> lock(ApiLocks<REALOBJECT>::mtx);

@@ -24,7 +24,7 @@
 namespace WebSockets   {
 namespace JsonRpc      {
 
-class Notification : public WPEFramework::Core::JSONRPC::Message
+class Notification : public Thunder::Core::JSONRPC::Message
 {
 public:
     Notification();

@@ -29,7 +29,7 @@
 #include "../Tags.h"
 
 #include "Milestone.h"
-#include "NotifyWPEFramework.h"
+#include "NotifyThunder.h"
 #include "RequestHeaders.h"
 #include "WhiteListedOriginDomainsList.h"
 
@@ -53,7 +53,7 @@
 #include "ProcessInfo.h"
 #endif
 
-using namespace WPEFramework;
+using namespace Thunder;
 
 static Core::NodeId GetConnectionNode()
 {
@@ -152,7 +152,7 @@ private:
     static void windowObjectClearedCallback(WebKitScriptWorld* world, WebKitWebPage* page, WebKitFrame* frame)
     {
         JavaScript::Milestone::InjectJS(world, frame);
-        JavaScript::NotifyWPEFramework::InjectJS(world, frame);
+        JavaScript::NotifyThunder::InjectJS(world, frame);
 
 #ifdef  ENABLE_SECURITY_AGENT
         JavaScript::SecurityAgent::InjectJS(world, frame);
@@ -232,13 +232,13 @@ private:
     string _consoleLogPrefix;
     gboolean _logToSystemConsoleEnabled;
     WebKitWebExtension* _extension;
-} _wpeFrameworkClient;
+} _ThunderClient;
 
 extern "C" {
 
 __attribute__((destructor)) static void unload()
 {
-    _wpeFrameworkClient.Deinitialize();
+    _ThunderClient.Deinitialize();
 }
 
 // Declare module name for tracer.
@@ -246,11 +246,11 @@ MODULE_NAME_DECLARATION(BUILD_REFERENCE)
 
 G_MODULE_EXPORT void webkit_web_extension_initialize_with_user_data(WebKitWebExtension* extension, GVariant* userData)
 {
-    _wpeFrameworkClient.Initialize(extension, userData);
+    _ThunderClient.Initialize(extension, userData);
 }
 
 }
 
 // explicit instantiation so that -O1/2/3 flags do not introduce undefined symbols
-template void WPEFramework::Core::IPCMessageType<2u, WPEFramework::RPC::Data::Input, WPEFramework::RPC::Data::Output>::RawSerializedType<WPEFramework::RPC::Data::Input, 4u>::AddRef() const;
-template void WPEFramework::Core::IPCMessageType<2u, WPEFramework::RPC::Data::Input, WPEFramework::RPC::Data::Output>::RawSerializedType<WPEFramework::RPC::Data::Output, 5u>::AddRef() const;
+template void Thunder::Core::IPCMessageType<2u, Thunder::RPC::Data::Input, Thunder::RPC::Data::Output>::RawSerializedType<Thunder::RPC::Data::Input, 4u>::AddRef() const;
+template void Thunder::Core::IPCMessageType<2u, Thunder::RPC::Data::Input, Thunder::RPC::Data::Output>::RawSerializedType<Thunder::RPC::Data::Output, 5u>::AddRef() const;

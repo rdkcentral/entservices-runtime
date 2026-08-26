@@ -26,7 +26,7 @@
 #include <string>
 #include "UtilsLogging.h"
 
-using namespace WPEFramework;
+using namespace Thunder;
 
 namespace Utils {
 

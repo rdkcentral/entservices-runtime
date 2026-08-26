@@ -24,13 +24,13 @@
 namespace WebSockets   {
 namespace JsonRpc      {
 
-Notification::Notification() : WPEFramework::Core::JSONRPC::Message()
+Notification::Notification() : Thunder::Core::JSONRPC::Message()
 {
 }
 
 bool Notification::isValid() const
 {
-    if (!JSONRPC.IsSet() || JSONRPC.Value().compare(WPEFramework::Core::JSONRPC::Message::DefaultVersion))
+    if (!JSONRPC.IsSet() || JSONRPC.Value().compare(Thunder::Core::JSONRPC::Message::DefaultVersion))
     {
         LOGERR("Failed JSONRPC2 version check");
         return false;

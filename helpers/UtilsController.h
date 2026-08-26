@@ -33,7 +33,7 @@
 
 #define SERVER_DETAILS  "127.0.0.1:9998"
 
-using namespace WPEFramework;
+using namespace Thunder;
 using namespace std;
 
 namespace Utils
@@ -145,7 +145,7 @@ namespace Utils
     };
 
     // Thunder Plugin Communication
-    std::shared_ptr<WPEFramework::JSONRPC::LinkType<WPEFramework::Core::JSON::IElement>> getThunderControllerClient(std::string callsign="")
+    std::shared_ptr<Thunder::JSONRPC::LinkType<Thunder::Core::JSON::IElement>> getThunderControllerClient(std::string callsign="")
     {
 
         string token;
@@ -153,7 +153,7 @@ namespace Utils
         string query = "token=" + token;
 
         Core::SystemInfo::SetEnvironment(_T("THUNDER_ACCESS"), (_T(SERVER_DETAILS)));
-        std::shared_ptr<WPEFramework::JSONRPC::LinkType<WPEFramework::Core::JSON::IElement>> thunderClient = make_shared<WPEFramework::JSONRPC::LinkType<WPEFramework::Core::JSON::IElement>>(callsign.c_str(), "", false, query);
+        std::shared_ptr<Thunder::JSONRPC::LinkType<Thunder::Core::JSON::IElement>> thunderClient = make_shared<Thunder::JSONRPC::LinkType<Thunder::Core::JSON::IElement>>(callsign.c_str(), "", false, query);
 
         return thunderClient;
     }

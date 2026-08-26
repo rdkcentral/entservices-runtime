@@ -34,7 +34,7 @@
 
 #include <plugins/plugins.h>
 
-namespace WPEFramework
+namespace Thunder
 {
 
     namespace Plugin
@@ -141,7 +141,7 @@ namespace WPEFramework
             std::string lastError_;
         };
     } // namespace Plugin
-} // namespace WPEFramework
+} // namespace Thunder
 
 
 #endif

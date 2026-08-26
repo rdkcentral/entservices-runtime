@@ -24,7 +24,7 @@
 namespace WebSockets   {
 namespace JsonRpc      {
 
-Response::Response() : WPEFramework::Core::JSONRPC::Message()
+Response::Response() : Thunder::Core::JSONRPC::Message()
 {
 }
 
@@ -73,7 +73,7 @@ bool Response::getError(JsonObject& jsonObject) const
 
 bool Response::isValid() const
 {
-    if (!JSONRPC.IsSet() || JSONRPC.Value().compare(WPEFramework::Core::JSONRPC::Message::DefaultVersion))
+    if (!JSONRPC.IsSet() || JSONRPC.Value().compare(Thunder::Core::JSONRPC::Message::DefaultVersion))
     {
         LOGERR("Failed jsonrpc version check");
         return false;

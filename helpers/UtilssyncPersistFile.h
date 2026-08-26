@@ -39,7 +39,7 @@ inline void syncPersistFile(const string file)
 
 inline void persistJsonSettings(const string strFile, const string strKey, const JsonValue& jsValue)
 {
-    WPEFramework::Core::File file;
+    Thunder::Core::File file;
     file = strFile.c_str();
 
     file.Open(false);

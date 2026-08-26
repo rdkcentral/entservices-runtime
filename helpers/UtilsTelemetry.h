@@ -55,7 +55,7 @@ namespace Utils
             va_list parameters;
             va_start(parameters, format);
             std::string message;
-            WPEFramework::Trace::Format(message, format, parameters);
+            Thunder::Trace::Format(message, format, parameters);
             va_end(parameters);
 
             // get rid of const for t2_event_s

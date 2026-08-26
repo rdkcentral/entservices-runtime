@@ -20,5 +20,5 @@
 
 #include "PluginInterfaceBuilder.h"
 
-using PowerManagerInterfaceBuilder = WPEFramework::Plugin::PluginInterfaceBuilder<WPEFramework::Exchange::IPowerManager>;
-using PowerManagerInterfaceRef = WPEFramework::Plugin::PluginInterfaceRef<WPEFramework::Exchange::IPowerManager>;
+using PowerManagerInterfaceBuilder = Thunder::Plugin::PluginInterfaceBuilder<Thunder::Exchange::IPowerManager>;
+using PowerManagerInterfaceRef = Thunder::Plugin::PluginInterfaceRef<Thunder::Exchange::IPowerManager>;

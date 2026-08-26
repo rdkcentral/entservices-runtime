@@ -26,7 +26,7 @@ namespace JsonRpc      {
 
 std::atomic<uint32_t> Request::idSequence(0);
 
-Request::Request() : WPEFramework::Core::JSONRPC::Message()
+Request::Request() : Thunder::Core::JSONRPC::Message()
 {
 }
 
@@ -42,7 +42,7 @@ uint32_t Request::generateId()
 
 bool Request::create(std::string method, const JsonObject &parameters)
 {
-    if (!JSONRPC.IsSet() || JSONRPC.Value().compare(WPEFramework::Core::JSONRPC::Message::DefaultVersion))
+    if (!JSONRPC.IsSet() || JSONRPC.Value().compare(Thunder::Core::JSONRPC::Message::DefaultVersion))
     {
         LOGERR("Failed JSONRPC2 version check");
         return false;

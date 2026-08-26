@@ -32,7 +32,7 @@ auto MoveFile(
     const string &from,
     const string &to) -> bool
 {
-    using namespace WPEFramework::Core;
+    using namespace Thunder::Core;
 
     File fileFrom(from);
     File fileTo(to);

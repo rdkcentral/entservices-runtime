@@ -25,7 +25,7 @@
 namespace WebSockets   {
 namespace JsonRpc      {
 
-class Request : public WPEFramework::Core::JSONRPC::Message
+class Request : public Thunder::Core::JSONRPC::Message
 {
 public:
     Request();

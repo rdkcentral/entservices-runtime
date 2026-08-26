@@ -24,7 +24,7 @@
 namespace WebSockets   {
 namespace JsonRpc      {
 
-class Response : public WPEFramework::Core::JSONRPC::Message
+class Response : public Thunder::Core::JSONRPC::Message
 {
 public:
     Response();

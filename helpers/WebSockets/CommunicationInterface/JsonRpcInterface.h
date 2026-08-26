@@ -129,7 +129,7 @@ void JsonRpcInterface<Derived>::onMessage(const std::string& message)
         }
         else
         {
-            if (json["id"].Content() != WPEFramework::Core::JSON::Variant::type::NUMBER)
+            if (json["id"].Content() != Thunder::Core::JSON::Variant::type::NUMBER)
             {
                 LOGERR("Received message contains ID field which is not a number. Dropping.");
                 return;
