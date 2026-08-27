@@ -41,7 +41,7 @@ bool RedirectAllLogsToService(const string& target_service)
   const string kServiceExt = ".service";
   if (target_service.size() <= kServiceExt.size() ||
       target_service.substr(target_service.size() - kServiceExt.size(), kServiceExt.size()) != kServiceExt) {
-    fprintf(stderr, "RedirectLog: Invalid serivce name: *.service format expected\n");
+    fprintf(stderr, "RedirectLog: Invalid service name: *.service format expected\n");
     return false;
   }
   // The name is concatenated into a cgroup path below, so it has to be a bare unit name.
