@@ -45,8 +45,12 @@ bool RedirectAllLogsToService(const string& target_service)
     return false;
   }
   // The name is concatenated into a cgroup path below, so it has to be a bare unit name.
-  if (target_service.find('/') != string::npos || target_service.find("..") != string::npos) {
-    fprintf(stderr, "RedirectLog: Invalid service name: '/' and '..' are not allowed\n");
+  if (target_service.find('/') != string::npos ||
+      target_service.find("..") != string::npos ||
+      target_service.find('\0') != string::npos ||
+      target_service.find('\n') != string::npos ||
+      target_service.find('\r') != string::npos) {
+    fprintf(stderr, "RedirectLog: Invalid service name: path separators, '..', or control characters are not allowed\n");
     return false;
   }
 
