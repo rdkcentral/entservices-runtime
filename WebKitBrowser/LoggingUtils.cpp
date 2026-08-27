@@ -41,7 +41,16 @@ bool RedirectAllLogsToService(const string& target_service)
   const string kServiceExt = ".service";
   if (target_service.size() <= kServiceExt.size() ||
       target_service.substr(target_service.size() - kServiceExt.size(), kServiceExt.size()) != kServiceExt) {
-    fprintf(stderr, "RedirectLog: Invalid serivce name: *.service format expected\n");
+    fprintf(stderr, "RedirectLog: Invalid service name: *.service format expected\n");
+    return false;
+  }
+  // The name is concatenated into a cgroup path below, so it has to be a bare unit name.
+  if (target_service.find('/') != string::npos ||
+      target_service.find("..") != string::npos ||
+      target_service.find('\0') != string::npos ||
+      target_service.find('\n') != string::npos ||
+      target_service.find('\r') != string::npos) {
+    fprintf(stderr, "RedirectLog: Invalid service name: path separators, '..', or control characters are not allowed\n");
     return false;
   }
 
