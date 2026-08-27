@@ -44,6 +44,11 @@ bool RedirectAllLogsToService(const string& target_service)
     fprintf(stderr, "RedirectLog: Invalid serivce name: *.service format expected\n");
     return false;
   }
+  // The name is concatenated into a cgroup path below, so it has to be a bare unit name.
+  if (target_service.find('/') != string::npos || target_service.find("..") != string::npos) {
+    fprintf(stderr, "RedirectLog: Invalid service name: '/' and '..' are not allowed\n");
+    return false;
+  }
 
   const string targetServiceName = target_service.substr(0, target_service.size() - kServiceExt.size());
   const string kSystemdCgroupTargetTasksFilePath = "/sys/fs/cgroup/systemd/system.slice/" + target_service + "/tasks";
