@@ -18,6 +18,7 @@
  */
 #include "wpewebkitconfig.h"
 #include "wpewebkitutils.h"
+#include "wpewebkit_2.46.h"
 
 #include <unistd.h>
 #include <sys/sysinfo.h>
@@ -888,6 +889,28 @@ WebKitSettings* WpeWebKitConfig::webKitSettings() const
     {
         g_object_set(G_OBJECT(preferences), kOpportunisticSweepingAndGCPropName,
                      m_launchConfig->opportunisticSweepingAndGC() ? TRUE : FALSE, nullptr);
+    }
+
+    // Exclude pages with media elements from the back/forward cache. A suspended
+    // media pipeline keeps the hardware decoder allocated, so the next page cannot
+    // acquire one on devices that have a limited number of them.
+    if (webKitVersion >= VersionNumber(2, 46, 0))
+    {
+        WebKitFeatureList* featureList = webkit_settings_get_all_features();
+        if (featureList)
+        {
+            const gsize length = webkit_feature_list_get_length(featureList);
+            for (gsize i = 0; i < length; i++)
+            {
+                WebKitFeature* feature = webkit_feature_list_get(featureList, i);
+                if (g_strcmp0(webkit_feature_get_identifier(feature), "BackForwardCacheWithMedia") == 0)
+                {
+                    webkit_settings_set_feature_enabled(preferences, feature, FALSE);
+                    break;
+                }
+            }
+            webkit_feature_list_unref(featureList);
+        }
     }
 
     return preferences;
