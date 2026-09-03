@@ -56,6 +56,7 @@ public:
 
 private:
     int estimateLocalStorageQuota() const;
+    bool applyOption(const std::string &key, const std::string& value);
 
 #define DEFINE_OPTIONS(type_, name_, init_, help_)     \
     type_ m_##name_ init_;
