@@ -52,6 +52,7 @@
     macro(bool, memoryMonitorUseContainerMode, {true}, "Enable memory monitor usage in container mode." ) \
     macro(bool, opportunisticSweepingAndGC, {true}, "Enable opportunistic sweeping and garbage collection.") \
     macro(bool, enableFireboltExtension, {true}, "Enable Firebolt extension.") \
+    macro(std::string, fireboltExtensionPath, {}, "Path to Firebolt extension.")
 
 //
 // configuration options set via envs or container environment

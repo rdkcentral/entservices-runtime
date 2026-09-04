@@ -1332,6 +1332,14 @@ void WpeWebKitView::initWebExtensionsCallback(WebKitWebContext *context,
 
     g_variant_builder_add(&builder, "{sv}", "common",   common.release());
 
+    if (self->m_config->enableFireboltExtension()) {
+        GVariantBuilder fireboltBuilder;
+        g_variant_builder_init(&fireboltBuilder, G_VARIANT_TYPE("a{sv}"));
+        g_variant_builder_add(&fireboltBuilder, "{sv}", "fireboltEndpoint",  g_variant_new_string(self->m_launchConfig->fireboltEndpoint().c_str()));
+        g_variant_builder_add(&fireboltBuilder, "{sv}", "fireboltExtensionPath", g_variant_new_string(self->m_launchConfig->fireboltExtensionPath().c_str()));
+        g_variant_builder_add(&builder, "{sv}", "firebolt", g_variant_builder_end(&fireboltBuilder));
+    }
+
     // set the user data for (all) the extensions
     GVariant *data = g_variant_builder_end(&builder);
     webkit_web_context_set_web_extensions_initialization_user_data(context, data);

@@ -73,4 +73,5 @@ public:
     virtual bool memoryMonitorUseContainerMode() const = 0;
     virtual bool opportunisticSweepingAndGC() const = 0;
     virtual bool enableFireboltExtension() const = 0;
+    virtual std::string fireboltExtensionPath() const = 0;
 };
