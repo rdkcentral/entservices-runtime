@@ -2861,7 +2861,8 @@ static GSourceFuncs _handlerIntervention =
                         webkit_memory_pressure_settings_set_memory_limit(memoryPressureSettings, _config.Memory.WebProcessSettings.Limit.Value());
                     }
                     if (_config.Memory.WebProcessSettings.GPUFile.IsSet() == true) {
-                        Core::SystemInfo::SetEnvironment(_T("WPE_POLL_MAX_MEMORY_GPU_FILE"), _config.Memory.WebProcessSettings.GPUFile.Value());
+                        const bool environmentOverride(WebKitBrowser::EnvironmentOverride(_config.EnvironmentOverride.Value()));
+                        Core::SystemInfo::SetEnvironment(_T("WPE_POLL_MAX_MEMORY_GPU_FILE"), _config.Memory.WebProcessSettings.GPUFile.Value(), !environmentOverride);
                     }
                     if (_config.Memory.WebProcessSettings.GPULimit.IsSet() == true) {
                         webkit_memory_pressure_settings_set_video_memory_limit(memoryPressureSettings, _config.Memory.WebProcessSettings.GPULimit.Value());
