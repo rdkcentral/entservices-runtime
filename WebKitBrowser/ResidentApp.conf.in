@@ -50,6 +50,8 @@ if boolean("@PLUGIN_RESIDENT_APP_LOGTOSYSTEMCONSOLE@"):
 configuration.add("secure", "@PLUGIN_RESIDENT_APP_SECURE@")
 configuration.add("watchdogchecktimeoutinseconds", "10")
 configuration.add("watchdoghangthresholdtinseconds", "60")
+configuration.add("serviceworker", "@PLUGIN_RESIDENT_APP_SERVICEWORKER@")
+configuration.add("icecandidatefiltering", "@PLUGIN_RESIDENT_APP_ICECANDIDATEFILTERING@")
 
 rootobject = JSON()
 rootobject.add("mode", "@PLUGIN_RESIDENT_APP_MODE@")

@@ -60,6 +60,8 @@ configuration.add("logtosystemconsoleenabled", "@PLUGIN_WEBKITBROWSER_LOGTOSYSTE
 configuration.add("secure", "@PLUGIN_WEBKITBROWSER_SECURE@")
 configuration.add("watchdogchecktimeoutinseconds", 10)
 configuration.add("watchdoghangthresholdtinseconds", 60)
+configuration.add("serviceworker", "@PLUGIN_WEBKITBROWSER_SERVICEWORKER@")
+configuration.add("icecandidatefiltering", "@PLUGIN_WEBKITBROWSER_ICECANDIDATEFILTERING@")
 
 root = JSON()
 root.add("mode", "@PLUGIN_WEBKITBROWSER_MODE@")

@@ -52,6 +52,8 @@ configuration.add("secure", "@PLUGIN_SEARCH_AND_DISCOVERY_APP_SECURE@")
 
 configuration.add("watchdogchecktimeoutinseconds", "10")
 configuration.add("watchdoghangthresholdtinseconds", "60")
+configuration.add("serviceworker", "@PLUGIN_SEARCH_AND_DISCOVERY_APP_SERVICEWORKER@")
+configuration.add("icecandidatefiltering", "@PLUGIN_SEARCH_AND_DISCOVERY_APP_ICECANDIDATEFILTERING@")
 
 rootobject = JSON()
 rootobject.add("mode", "@PLUGIN_SEARCH_AND_DISCOVERY_APP_MODE@")

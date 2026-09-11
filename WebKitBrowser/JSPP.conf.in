@@ -50,6 +50,8 @@ if boolean("@PLUGIN_JSPP_LOGTOSYSTEMCONSOLE@"):
 configuration.add("secure", "@PLUGIN_JSPP_SECURE@")
 configuration.add("watchdogchecktimeoutinseconds", "10")
 configuration.add("watchdoghangthresholdtinseconds", "60")
+configuration.add("serviceworker", "@PLUGIN_JSPP_SERVICEWORKER@")
+configuration.add("icecandidatefiltering", "@PLUGIN_JSPP_ICECANDIDATEFILTERING@")
 configuration.add("loadblankpageonsuspendenabled", "false")
 
 environmentvariables = []

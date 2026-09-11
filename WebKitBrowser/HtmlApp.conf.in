@@ -54,6 +54,8 @@ if boolean("@PLUGIN_HTML_APP_LOGTOSYSTEMCONSOLE@"):
 configuration.add("secure", "@PLUGIN_HTML_APP_SECURE@")
 configuration.add("watchdogchecktimeoutinseconds", "10")
 configuration.add("watchdoghangthresholdtinseconds", "60")
+configuration.add("serviceworker", "@PLUGIN_HTML_APP_SERVICEWORKER@")
+configuration.add("icecandidatefiltering", "@PLUGIN_HTML_APP_ICECANDIDATEFILTERING@")
 configuration.add("loadblankpageonsuspendenabled", "true")
 
 rootobject = JSON()
