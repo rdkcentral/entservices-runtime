@@ -2895,6 +2895,22 @@ static GSourceFuncs _handlerIntervention =
                             nullptr));
                     }
                     webkit_memory_pressure_settings_free(memoryPressureSettings);
+                } else if ((_config.Memory.IsSet() == true) && (_config.Memory.ServiceWorkerProcessSettings.IsSet() == true)) {
+                    WebKitMemoryPressureSettings* serviceWorkerMemoryPressureSettings = webkit_memory_pressure_settings_new();
+
+                    if (_config.Memory.ServiceWorkerProcessSettings.Limit.IsSet() == true) {
+                        webkit_memory_pressure_settings_set_memory_limit(serviceWorkerMemoryPressureSettings, _config.Memory.ServiceWorkerProcessSettings.Limit.Value());
+                    }
+                    if (_config.Memory.ServiceWorkerProcessSettings.PollInterval.IsSet() == true) {
+                        webkit_memory_pressure_settings_set_poll_interval(serviceWorkerMemoryPressureSettings, _config.Memory.ServiceWorkerProcessSettings.PollInterval.Value());
+                    }
+
+                    // Pass service worker process memory pressure settings to WebKitWebContext constructor
+                    wkContext = WEBKIT_WEB_CONTEXT(g_object_new(WEBKIT_TYPE_WEB_CONTEXT,
+                        "website-data-manager", websiteDataManager,
+                        "service-worker-memory-pressure-settings", serviceWorkerMemoryPressureSettings,
+                        nullptr));
+                    webkit_memory_pressure_settings_free(serviceWorkerMemoryPressureSettings);
                 } else
 #endif
                 {
