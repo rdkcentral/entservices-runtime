@@ -2704,15 +2704,6 @@ static GSourceFuncs _handlerIntervention =
             webkit_authentication_request_authenticate(request, nullptr);
             return TRUE;
         }
-        static void postExitJob()
-        {
-            struct ExitJob : public Core::IDispatch
-            {
-                void Dispatch() override { exit(1); }
-            };
-
-            Core::IWorkerPool::Instance().Submit(Core::ProxyType<Core::IDispatch>(Core::ProxyType<ExitJob>::Create()));
-        }
         static void webProcessTerminatedCallback(VARIABLE_IS_NOT_USED WebKitWebView* webView, WebKitWebProcessTerminationReason reason, WebKitImplementation* browser)
         {
             switch (reason) {
@@ -3568,6 +3559,16 @@ static GSourceFuncs _handlerIntervention =
             }
         }
 #endif // WEBKIT_GLIB_API
+
+        static void postExitJob()
+        {
+            struct ExitJob : public Core::IDispatch
+            {
+                void Dispatch() override { exit(1); }
+            };
+
+            Core::IWorkerPool::Instance().Submit(Core::ProxyType<Core::IDispatch>(Core::ProxyType<ExitJob>::Create()));
+        }
 
         void DeactivateBrowser(PluginHost::IShell::reason reason) {
             ASSERT(_service != nullptr);
