@@ -2699,7 +2699,7 @@ static GSourceFuncs _handlerIntervention =
             }
             browser->OnLoadFailed(failingURI);
         }
-        static bool authenticationCallback(WebKitWebView*, WebKitAuthenticationRequest* request)
+        static gboolean authenticationCallback(WebKitWebView*, WebKitAuthenticationRequest* request)
         {
             webkit_authentication_request_authenticate(request, nullptr);
             return TRUE;
