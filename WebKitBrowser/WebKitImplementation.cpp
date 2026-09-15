@@ -361,6 +361,13 @@ static GSourceFuncs _handlerIntervention =
         if (implementation != nullptr) {
             delete implementation;
             implementation = nullptr;
+#ifdef __CORE_MESSAGING__
+            // Messaging has to be destroyed before Singletons are disposed.
+            // WPEProcess will usually take care of this at the end of its main() func,
+            // but being here suggests that something went wrong and possibly
+            // we are closing with exit() func (from postExitJob())
+            Messaging::MessageUnit::Instance().Close();
+#endif
         }
     }
 
@@ -489,24 +496,71 @@ static GSourceFuncs _handlerIntervention =
         public:
             class MemorySettings : public Core::JSON::Container {
             public:
+                class Settings : public Core::JSON::Container {
+                public:
+                    Settings(const Settings&) = delete;
+                    Settings& operator=(const Settings&) = delete;
+
+                    Settings()
+                        : Core::JSON::Container()
+                        , PollInterval()
+                        , Limit()
+                    {
+                        Add(_T("pollinterval"), &PollInterval);
+                        Add(_T("limit"), &Limit);
+                    }
+                    ~Settings()
+                    {
+                    }
+
+                public:
+                    Core::JSON::DecUInt32 PollInterval;
+                    Core::JSON::DecUInt32 Limit;
+                };
+
+                class WebProcess : public Settings {
+                public:
+                    WebProcess(const WebProcess&) = delete;
+                    WebProcess& operator=(const WebProcess&) = delete;
+
+                    WebProcess()
+                        : Settings()
+                        , GPULimit()
+                        , GPUFile()
+                    {
+                        Add(_T("gpulimit"), &GPULimit);
+                        Add(_T("gpufile"), &GPUFile);
+                    }
+                    ~WebProcess()
+                    {
+                    }
+
+                public:
+                    Core::JSON::DecUInt32 GPULimit;
+                    Core::JSON::String GPUFile;
+                };
+            public:
                 MemorySettings(const MemorySettings&) = delete;
                 MemorySettings& operator=(const MemorySettings&) = delete;
 
                 MemorySettings()
                     : Core::JSON::Container()
-                    , WebProcessLimit()
-                    , NetworkProcessLimit()
+                    , WebProcessSettings()
+                    , NetworkProcessSettings()
+                    , ServiceWorkerProcessSettings()
                 {
-                    Add(_T("webprocesslimit"), &WebProcessLimit);
-                    Add(_T("networkprocesslimit"), &NetworkProcessLimit);
+                    Add(_T("webprocesssettings"), &WebProcessSettings);
+                    Add(_T("networkprocesssettings"), &NetworkProcessSettings);
+                    Add(_T("serviceworkerprocesssettings"), &ServiceWorkerProcessSettings);
                 }
                 ~MemorySettings()
                 {
                 }
 
             public:
-                Core::JSON::DecUInt32 WebProcessLimit;
-                Core::JSON::DecUInt32 NetworkProcessLimit;
+                WebProcess WebProcessSettings;
+                Settings NetworkProcessSettings;
+                WebProcess ServiceWorkerProcessSettings;
             };
 
         public:
@@ -575,6 +629,8 @@ static GSourceFuncs _handlerIntervention =
                 , ContentFilter()
                 , LoggingTarget()
                 , WebAudioEnabled(false)
+                , ServiceWorkerEnabled(false)
+                , ICECandidateFilteringEnabled()
             {
                 Add(_T("useragent"), &UserAgent);
                 Add(_T("url"), &URL);
@@ -641,6 +697,8 @@ static GSourceFuncs _handlerIntervention =
                 Add(_T("contentfilter"), &ContentFilter);
                 Add(_T("loggingtarget"), &LoggingTarget);
                 Add(_T("webaudio"), &WebAudioEnabled);
+                Add(_T("serviceworker"), &ServiceWorkerEnabled);
+                Add(_T("icecandidatefiltering"), &ICECandidateFilteringEnabled);
             }
             ~Config()
             {
@@ -712,6 +770,8 @@ static GSourceFuncs _handlerIntervention =
             Core::JSON::String ContentFilter;
             Core::JSON::String LoggingTarget;
             Core::JSON::Boolean WebAudioEnabled;
+            Core::JSON::Boolean ServiceWorkerEnabled;
+            Core::JSON::Boolean ICECandidateFilteringEnabled;
         };
 
         class HangDetector
@@ -738,7 +798,27 @@ static GSourceFuncs _handlerIntervention =
                 ++_expiryCount;
 
                 if ( _expiryCount > (_watchDogTresholdInSeconds /  _watchDogTimeoutInSeconds) ) {
-                    _browser.DeactivateBrowser(PluginHost::IShell::WATCHDOG_EXPIRED);
+                    if (_browser._outOfProcess == false) {
+                        // This is the Thunder process; signalling it would take every other plugin with it.
+                        SYSLOG(Logging::Error, (_T("Hang detected in browser thread. Deactivating the in-process browser.")));
+                        _browser.DeactivateBrowser(PluginHost::IShell::WATCHDOG_EXPIRED);
+                        return;
+                    }
+
+                    pid_t pid = getpid();
+                    SYSLOG(Logging::Error, (_T("Hang detected in browser thread in process %u. Sending SIGFPE."), pid));
+                    if (syscall( __NR_tgkill, pid, pid, SIGFPE ) == -1) {
+                        SYSLOG(Logging::Error, (_T("tgkill failed, signal=%d process=%u errno=%d (%s)"), SIGFPE, pid, errno, strerror(errno)));
+                    }
+                    else {
+                        g_usleep( _watchDogTresholdInSeconds * G_USEC_PER_SEC );
+                    }
+                    SYSLOG(Logging::Error, (_T("Process %u is still running! sending SIGKILL\n"), pid));
+                    if (syscall( __NR_tgkill, pid, pid, SIGKILL ) == -1) {
+                        SYSLOG(Logging::Error, (_T("tgkill failed, signal=%d process=%u errno=%d (%s)"), SIGKILL, pid, errno, strerror(errno)));
+                    }
+                    ASSERT(!"This should not be reached");
+                    return;
                 }
 
                 _worker.Reschedule(Core::Time::Now().Add(_watchDogTimeoutInSeconds * 1000));
@@ -813,6 +893,7 @@ static GSourceFuncs _handlerIntervention =
             , _URL()
             , _dataPath()
             , _service(nullptr)
+            , _outOfProcess(true)
             , _headers()
             , _localStorageEnabled(false)
             , _httpStatusCode(-1)
@@ -2151,6 +2232,14 @@ static GSourceFuncs _handlerIntervention =
             #endif
             _service = service;
 
+            // Thunder picks in- or out-of-process from this very root config (see
+            // PluginHost::IShell::Root()), so read it back through the same class to
+            // be sure we cannot disagree with the decision it already made.
+            const WPEFramework::Plugin::Config::RootConfig rootConfig(service);
+            _outOfProcess = (rootConfig.Mode.IsSet() == true
+                                 ? (rootConfig.Mode.Value() != WPEFramework::Plugin::Config::RootConfig::ModeType::OFF)
+                                 : rootConfig.OutOfProcess.Value());
+
             _dataPath = service->DataPath();
 
             string configLine = service->ConfigLine();
@@ -2198,11 +2287,11 @@ static GSourceFuncs _handlerIntervention =
             // Memory Pressure
 #if !HAS_MEMORY_PRESSURE_SETTINGS_API
             std::stringstream limitStr;
-            if ((_config.Memory.IsSet() == true) && (_config.Memory.NetworkProcessLimit.IsSet() == true)) {
-                limitStr << "networkprocess:" << _config.Memory.NetworkProcessLimit.Value() << "m";
+            if ((_config.Memory.IsSet() == true) && (_config.Memory.NetworkProcessSettings.Limit.IsSet() == true)) {
+                limitStr << "networkprocess:" << _config.Memory.NetworkProcessSettings.Limit.Value() << "m";
             }
-            if ((_config.Memory.IsSet() == true) && (_config.Memory.WebProcessLimit.IsSet() == true)) {
-                limitStr << (!limitStr.str().empty() ? "," : "") << "webprocess:" << _config.Memory.WebProcessLimit.Value() << "m";
+            if ((_config.Memory.IsSet() == true) && (_config.Memory.WebProcessSettings.Limit.IsSet() == true)) {
+                limitStr << (!limitStr.str().empty() ? "," : "") << "webprocess:" << _config.Memory.WebProcessSettings.Limit.Value() << "m";
             }
             if (!limitStr.str().empty()) {
                 Core::SystemInfo::SetEnvironment(_T("WPE_POLL_MAX_MEMORY"), limitStr.str(), !environmentOverride);
@@ -2619,32 +2708,33 @@ static GSourceFuncs _handlerIntervention =
         static void loadFailedCallback(WebKitWebView*, WebKitLoadEvent loadEvent, const gchar* failingURI, GError* error, WebKitImplementation* browser)
         {
             string message(string("{ \"url\": \"") + failingURI + string("\", \"Error message\": \"") + error->message + string("\", \"loadEvent\":") + Core::NumberType<uint32_t>(loadEvent).Text() + string(" }"));
-            SYSLOG(Trace::Information, (_T("LoadFailed: %s"), message.c_str()));
+            SYSLOG(Logging::Notification, (_T("LoadFailed: %s"), message.c_str()));
             if (g_error_matches(error, WEBKIT_NETWORK_ERROR, WEBKIT_NETWORK_ERROR_CANCELLED)) {
                 browser->_ignoreLoadFinishedOnce = true;
                 return;
             }
             browser->OnLoadFailed(failingURI);
         }
+        static gboolean authenticationCallback(WebKitWebView*, WebKitAuthenticationRequest* request, gpointer)
+        {
+            webkit_authentication_request_authenticate(request, nullptr);
+            return TRUE;
+        }
         static void webProcessTerminatedCallback(VARIABLE_IS_NOT_USED WebKitWebView* webView, WebKitWebProcessTerminationReason reason, WebKitImplementation* browser)
         {
             switch (reason) {
             case WEBKIT_WEB_PROCESS_CRASHED:
-                SYSLOG(Trace::Fatal, (_T("CRASH: WebProcess crashed: exiting ...")));
+                SYSLOG(Logging::Fatal, (_T("CRASH: WebProcess crashed: exiting ...")));
                 break;
             case WEBKIT_WEB_PROCESS_EXCEEDED_MEMORY_LIMIT:
-                SYSLOG(Trace::Fatal, (_T("CRASH: WebProcess terminated due to memory limit: exiting ...")));
+                SYSLOG(Logging::Fatal, (_T("CRASH: WebProcess terminated due to memory limit: exiting ...")));
                 break;
             case WEBKIT_WEB_PROCESS_TERMINATED_BY_API:
-                SYSLOG(Trace::Fatal, (_T("CRASH: WebProcess terminated by API")));
+                SYSLOG(Logging::Fatal, (_T("CRASH: WebProcess terminated by API")));
                 break;
             }
             g_signal_handlers_block_matched(webView, G_SIGNAL_MATCH_DATA, 0, 0, nullptr, nullptr, browser);
-            struct ExitJob : public Core::IDispatch
-            {
-                virtual void Dispatch() { exit(1); }
-            };
-            Core::IWorkerPool::Instance().Submit(Core::proxy_cast<Core::IDispatch>(Core::ProxyType<ExitJob>::Create()));
+            postExitJob();
         }
         static void closeCallback(VARIABLE_IS_NOT_USED WebKitWebView* webView, WebKitImplementation* browser)
         {
@@ -2757,9 +2847,14 @@ static GSourceFuncs _handlerIntervention =
                 }
 
 #if HAS_MEMORY_PRESSURE_SETTINGS_API
-                if ((_config.Memory.IsSet() == true) && (_config.Memory.NetworkProcessLimit.IsSet() == true)) {
+                if ((_config.Memory.IsSet() == true) && (_config.Memory.NetworkProcessSettings.IsSet() == true)) {
                     WebKitMemoryPressureSettings* memoryPressureSettings = webkit_memory_pressure_settings_new();
-                    webkit_memory_pressure_settings_set_memory_limit(memoryPressureSettings, _config.Memory.NetworkProcessLimit.Value());
+                    if (_config.Memory.NetworkProcessSettings.Limit.IsSet() == true) {
+                        webkit_memory_pressure_settings_set_memory_limit(memoryPressureSettings, _config.Memory.NetworkProcessSettings.Limit.Value());
+                    }
+                    if (_config.Memory.NetworkProcessSettings.PollInterval.IsSet() == true) {
+                        webkit_memory_pressure_settings_set_poll_interval(memoryPressureSettings, _config.Memory.NetworkProcessSettings.PollInterval.Value());
+                    }
                     webkit_website_data_manager_set_memory_pressure_settings(memoryPressureSettings);
                     webkit_memory_pressure_settings_free(memoryPressureSettings);
                 }
@@ -2776,12 +2871,63 @@ static GSourceFuncs _handlerIntervention =
                 g_free(indexedDBPath);
 
 #if HAS_MEMORY_PRESSURE_SETTINGS_API
-                if ((_config.Memory.IsSet() == true) && (_config.Memory.WebProcessLimit.IsSet() == true)) {
+                if ((_config.Memory.IsSet() == true) && (_config.Memory.WebProcessSettings.IsSet() == true)) {
                     WebKitMemoryPressureSettings* memoryPressureSettings = webkit_memory_pressure_settings_new();
-                    webkit_memory_pressure_settings_set_memory_limit(memoryPressureSettings, _config.Memory.WebProcessLimit.Value());
-                    // Pass web process memory pressure settings to WebKitWebContext constructor
-                    wkContext = WEBKIT_WEB_CONTEXT(g_object_new(WEBKIT_TYPE_WEB_CONTEXT, "website-data-manager", websiteDataManager, "memory-pressure-settings", memoryPressureSettings, nullptr));
+                    if (_config.Memory.WebProcessSettings.Limit.IsSet() == true) {
+                        webkit_memory_pressure_settings_set_memory_limit(memoryPressureSettings, _config.Memory.WebProcessSettings.Limit.Value());
+                    }
+                    if (_config.Memory.WebProcessSettings.GPUFile.IsSet() == true) {
+                        const bool environmentOverride(WebKitBrowser::EnvironmentOverride(_config.EnvironmentOverride.Value()));
+                        Core::SystemInfo::SetEnvironment(_T("WPE_POLL_MAX_MEMORY_GPU_FILE"), _config.Memory.WebProcessSettings.GPUFile.Value(), !environmentOverride);
+                    }
+                    if (_config.Memory.WebProcessSettings.GPULimit.IsSet() == true) {
+                        webkit_memory_pressure_settings_set_video_memory_limit(memoryPressureSettings, _config.Memory.WebProcessSettings.GPULimit.Value());
+                    }
+                    if (_config.Memory.WebProcessSettings.PollInterval.IsSet() == true) {
+                        webkit_memory_pressure_settings_set_poll_interval(memoryPressureSettings, _config.Memory.WebProcessSettings.PollInterval.Value());
+                    }
+
+                    if (_config.Memory.ServiceWorkerProcessSettings.IsSet() == true) {
+                        WebKitMemoryPressureSettings* serviceWorkerMemoryPressureSettings = webkit_memory_pressure_settings_new();
+
+                        if (_config.Memory.ServiceWorkerProcessSettings.Limit.IsSet() == true) {
+                            webkit_memory_pressure_settings_set_memory_limit(serviceWorkerMemoryPressureSettings, _config.Memory.ServiceWorkerProcessSettings.Limit.Value());
+                        }
+                        if (_config.Memory.ServiceWorkerProcessSettings.PollInterval.IsSet() == true) {
+                            webkit_memory_pressure_settings_set_poll_interval(serviceWorkerMemoryPressureSettings, _config.Memory.ServiceWorkerProcessSettings.PollInterval.Value());
+                        }
+
+                        // Pass web and service worker process memory pressure settings to WebKitWebContext constructor
+                        wkContext = WEBKIT_WEB_CONTEXT(g_object_new(WEBKIT_TYPE_WEB_CONTEXT,
+                            "website-data-manager", websiteDataManager,
+                            "memory-pressure-settings", memoryPressureSettings,
+                            "service-worker-memory-pressure-settings", serviceWorkerMemoryPressureSettings,
+                            nullptr));
+                        webkit_memory_pressure_settings_free(serviceWorkerMemoryPressureSettings);
+                    } else {
+                        // Pass web process memory pressure settings to WebKitWebContext constructor
+                        wkContext = WEBKIT_WEB_CONTEXT(g_object_new(WEBKIT_TYPE_WEB_CONTEXT,
+                            "website-data-manager", websiteDataManager,
+                            "memory-pressure-settings", memoryPressureSettings,
+                            nullptr));
+                    }
                     webkit_memory_pressure_settings_free(memoryPressureSettings);
+                } else if ((_config.Memory.IsSet() == true) && (_config.Memory.ServiceWorkerProcessSettings.IsSet() == true)) {
+                    WebKitMemoryPressureSettings* serviceWorkerMemoryPressureSettings = webkit_memory_pressure_settings_new();
+
+                    if (_config.Memory.ServiceWorkerProcessSettings.Limit.IsSet() == true) {
+                        webkit_memory_pressure_settings_set_memory_limit(serviceWorkerMemoryPressureSettings, _config.Memory.ServiceWorkerProcessSettings.Limit.Value());
+                    }
+                    if (_config.Memory.ServiceWorkerProcessSettings.PollInterval.IsSet() == true) {
+                        webkit_memory_pressure_settings_set_poll_interval(serviceWorkerMemoryPressureSettings, _config.Memory.ServiceWorkerProcessSettings.PollInterval.Value());
+                    }
+
+                    // Pass service worker process memory pressure settings to WebKitWebContext constructor
+                    wkContext = WEBKIT_WEB_CONTEXT(g_object_new(WEBKIT_TYPE_WEB_CONTEXT,
+                        "website-data-manager", websiteDataManager,
+                        "service-worker-memory-pressure-settings", serviceWorkerMemoryPressureSettings,
+                        nullptr));
+                    webkit_memory_pressure_settings_free(serviceWorkerMemoryPressureSettings);
                 } else
 #endif
                 {
@@ -2896,6 +3042,16 @@ static GSourceFuncs _handlerIntervention =
                      "allow-running-of-insecure-content", !enableWebSecurity,
                      "allow-display-of-insecure-content", !enableWebSecurity, nullptr);
 #endif
+            // Service Worker support
+            g_object_set(G_OBJECT(preferences),
+                     "enable-service-worker", _config.ServiceWorkerEnabled.Value(), nullptr);
+
+            // ICE candidate filtering
+            if (_config.ICECandidateFilteringEnabled.IsSet()) {
+                g_object_set(G_OBJECT(preferences),
+                     "enable-ice-candidate-filtering",  _config.ICECandidateFilteringEnabled.Value(), nullptr);
+            }
+
             _view = WEBKIT_WEB_VIEW(g_object_new(WEBKIT_TYPE_WEB_VIEW,
                 "backend", webkit_web_view_backend_new(wpe_view_backend_create(), nullptr, nullptr),
                 "web-context", wkContext,
@@ -2937,6 +3093,7 @@ static GSourceFuncs _handlerIntervention =
             g_signal_connect(_view, "user-message-received", reinterpret_cast<GCallback>(userMessageReceivedCallback), this);
             g_signal_connect(_view, "notify::is-web-process-responsive", reinterpret_cast<GCallback>(isWebProcessResponsiveCallback), this);
             g_signal_connect(_view, "load-failed", reinterpret_cast<GCallback>(loadFailedCallback), this);
+            g_signal_connect(_view, "authenticate", reinterpret_cast<GCallback>(authenticationCallback), nullptr);
 
             _configurationCompleted.SetState(true);
 
@@ -3256,7 +3413,7 @@ static GSourceFuncs _handlerIntervention =
                     gchar* scriptContent;
                     auto success = g_file_get_contents(path.c_str(), &scriptContent, nullptr, nullptr);
                     if (!success) {
-                        SYSLOG(Trace::Error, (_T("Unable to read user script '%s'"), path.c_str()));
+                        SYSLOG(Logging::Error, (_T("Unable to read user script '%s'"), path.c_str()));
                         return;
                     }
                     AddUserScriptImpl(scriptContent, false);
@@ -3332,6 +3489,14 @@ static GSourceFuncs _handlerIntervention =
 #endif
         }
 
+        pid_t GetWebGetProcessIdentifier() {
+#ifdef WEBKIT_GLIB_API
+            return webkit_web_view_get_web_process_identifier(_view);
+#else
+            return WKPageGetProcessIdentifier(GetPage());
+#endif
+        }
+
         void DidReceiveWebProcessResponsivenessReply(bool isWebProcessResponsive)
         {
             if (_config.WatchDogHangThresholdInSeconds.Value() == 0 || _config.WatchDogCheckTimeoutInSeconds.Value() == 0)
@@ -3378,8 +3543,9 @@ static GSourceFuncs _handlerIntervention =
                 if (_unresponsiveReplyNum <= kWebProcessUnresponsiveReplyDefaultLimit) {
                     _unresponsiveReplyNum = kWebProcessUnresponsiveReplyDefaultLimit;
                     Logging::DumpSystemFiles(webprocessPID);
-                    if (syscall(__NR_tgkill, webprocessPID, webprocessPID, SIGFPE) == -1) {
-                        SYSLOG(Trace::Error, (_T("tgkill failed, signal=%d process=%u errno=%d (%s)"), SIGFPE, webprocessPID, errno, strerror(errno)));
+                    // Kill with SIGHUP with no coredump/minidump
+                    if (syscall(__NR_tgkill, webprocessPID, webprocessPID, SIGHUP) == -1) {
+                        SYSLOG(Logging::Error, (_T("tgkill failed, signal=%d process=%u errno=%d (%s)"), SIGHUP, webprocessPID, errno, strerror(errno)));
                     }
                 } else {
                     DeactivateBrowser(PluginHost::IShell::FAILURE);
@@ -3391,7 +3557,7 @@ static GSourceFuncs _handlerIntervention =
                 Logging::DumpSystemFiles(webprocessPID);
 
                 if (syscall(__NR_tgkill, webprocessPID, webprocessPID, SIGFPE) == -1) {
-                    SYSLOG(Trace::Error, (_T("tgkill failed, signal=%d process=%u errno=%d (%s)"), SIGFPE, webprocessPID, errno, strerror(errno)));
+                    SYSLOG(Logging::Error, (_T("tgkill failed, signal=%d process=%u errno=%d (%s)"), SIGFPE, webprocessPID, errno, strerror(errno)));
                 }
             } else if (_unresponsiveReplyNum == (2 * kWebProcessUnresponsiveReplyDefaultLimit)) {
                 DeactivateBrowser(PluginHost::IShell::WATCHDOG_EXPIRED);
@@ -3427,9 +3593,29 @@ static GSourceFuncs _handlerIntervention =
         }
 #endif // WEBKIT_GLIB_API
 
+        static void postExitJob()
+        {
+            struct ExitJob : public Core::IDispatch
+            {
+                void Dispatch() override { exit(1); }
+            };
+
+            Core::IWorkerPool::Instance().Submit(Core::ProxyType<Core::IDispatch>(Core::ProxyType<ExitJob>::Create()));
+        }
+
         void DeactivateBrowser(PluginHost::IShell::reason reason) {
             ASSERT(_service != nullptr);
-            Core::IWorkerPool::Instance().Submit(PluginHost::IShell::Job::Create(_service, PluginHost::IShell::DEACTIVATED, reason));
+            const char *reasonStr = Core::EnumerateType<PluginHost::IShell::reason>(reason).Data();
+
+            if (_outOfProcess == false) {
+                // Exiting here would take down Thunder itself, so hand the plugin back to the framework.
+                SYSLOG(Logging::Fatal, (_T("Deactivating the in-process browser, reason - %s"), (reasonStr ? reasonStr : "")));
+                Core::IWorkerPool::Instance().Submit(PluginHost::IShell::Job::Create(_service, PluginHost::IShell::DEACTIVATED, reason));
+                return;
+            }
+
+            SYSLOG(Logging::Fatal, (_T("Posting a job to exit, reason - %s"), (reasonStr ? reasonStr : "")));
+            postExitJob();
         }
 
     private:
@@ -3437,6 +3623,7 @@ static GSourceFuncs _handlerIntervention =
         string _URL;
         string _dataPath;
         PluginHost::IShell* _service;
+        bool _outOfProcess;
         string _headers;
         bool _localStorageEnabled;
         int32_t _httpStatusCode;
@@ -3641,7 +3828,7 @@ static GSourceFuncs _handlerIntervention =
 
         string url = GetPageActiveURL(page);
         string message(string("{ \"url\": \"") + url + string("\", \"Error code\":") + Core::NumberType<uint32_t>(errorcode).Text() + string(" }"));
-        SYSLOG(Trace::Information, (_T("LoadFailed: %s"), message.c_str()));
+        SYSLOG(Logging::Notification, (_T("LoadFailed: %s"), message.c_str()));
 
         bool isCanceled =
             errorDomain &&
@@ -3658,7 +3845,7 @@ static GSourceFuncs _handlerIntervention =
 
     /* static */ void webProcessDidCrash(WKPageRef, const void*)
     {
-        SYSLOG(Trace::Fatal, (_T("CRASH: WebProcess crashed, exiting...")));
+        SYSLOG(Logging::Fatal, (_T("CRASH: WebProcess crashed, exiting...")));
         exit(1);
     }
 

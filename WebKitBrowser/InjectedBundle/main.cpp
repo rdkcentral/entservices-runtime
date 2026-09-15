@@ -91,7 +91,9 @@ public:
         : _engine(Core::ProxyType<RPC::InvokeServerType<2, 0, 4>>::Create())
         , _comClient(Core::ProxyType<RPC::CommunicatorClient>::Create(GetConnectionNode(), Core::ProxyType<Core::IIPCServer>(_engine)))
     {
+#if !defined(THUNDER_VERSION) || THUNDER_VERSION < 4 || (THUNDER_VERSION == 4 && defined(THUNDER_VERSION_MINOR) && THUNDER_VERSION_MINOR < 4)
         _engine->Announcements(_comClient->Announcement());
+#endif
     }
     ~PluginHost()
     {
@@ -108,7 +110,11 @@ public:
             TRACE(Trace::Error, (_T("Could not open connection to node %s. Error: %s"), _comClient->Source().RemoteId().c_str(), Core::NumberType<uint32_t>(result).Text().c_str()));
         } else {
             // Due to the LXC container support all ID's get mapped. For the TraceBuffer, use the host given ID.
+#ifdef __CORE_MESSAGING__
+            Messaging::MessageUnit::Instance().Open(_comClient->ConnectionId());
+#else
             Trace::TraceUnit::Instance().Open(_comClient->ConnectionId());
+#endif  /* __CORE_MESSAGING__ */
         }
         _whiteListedOriginDomainPairs = WhiteListedOriginDomainsList::RequestFromWPEFramework();
 
@@ -121,6 +127,12 @@ public:
     {
 #if defined(UPDATE_TZ_FROM_FILE)
         _tzSupport.Deinitialize();
+#endif
+
+#ifdef __CORE_MESSAGING__
+        // Messaging has to be destroyed before Singletons are disposed.
+        // We are not inside WPEProcess so need to do it manually.
+        Messaging::MessageUnit::Instance().Close();
 #endif
         if (_comClient.IsValid() == true) {
             _comClient.Release();
@@ -341,7 +353,11 @@ static WKBundlePageUIClientV4 s_pageUIClient = {
         uint32_t columnNumber, WKStringRef url, const void* clientInfo) {
         auto prepareMessage = [&]() {
             string messageString = WebKit::Utils::WKStringToString(message);
+#ifdef __CORE_MESSAGING__
+            const uint16_t maxStringLength = Messaging::MessageUnit::DataSize - 1;
+#else
             const uint16_t maxStringLength = Trace::TRACINGBUFFERSIZE - 1;
+#endif
             if (messageString.length() > maxStringLength) {
                 messageString = messageString.substr(0, maxStringLength);
             }
