@@ -126,7 +126,6 @@ namespace Plugin {
             _cookieJar = _browser->QueryInterface<Exchange::IBrowserCookieJar>();
             if (_cookieJar) {
                 _cookieJar->Register(&_notification);
-                Exchange::JBrowserCookieJar::Register(*this, _cookieJar);
             }
 
             _browserScripting = _browser->QueryInterface<Exchange::IBrowserScripting>();
@@ -160,7 +159,6 @@ namespace Plugin {
             _browserScripting = nullptr;
         }
         if (_cookieJar) {
-            Exchange::JBrowserCookieJar::Unregister(*this);
             _cookieJar->Unregister(&_notification);
             _cookieJar->Release();
             _cookieJar = nullptr;
@@ -300,7 +298,12 @@ namespace Plugin {
             }
 
             Core::Directory dir(normalizedPath.c_str());
-            if (!dir.Destroy(true)) {
+#if defined(THUNDER_VERSION) && THUNDER_VERSION >= 4
+            const bool success = dir.Destroy();
+#else
+            const bool success = dir.Destroy(true);
+#endif
+            if (success == false) {
                 TRACE(Trace::Error, (_T("Failed to delete %s\n"), fullPath.c_str()));
                 result = Core::ERROR_GENERAL;
             }
@@ -356,7 +359,7 @@ namespace Plugin {
 
     void WebKitBrowser::CookieJarChanged()
     {
-        Exchange::JBrowserCookieJar::Event::CookieJarChanged(*this);
+        Notify(_T("cookiejarchanged"));
     }
 
     void WebKitBrowser::StateChange(const PluginHost::IStateControl::state state)
@@ -474,7 +477,11 @@ namespace WebKitBrowser {
             _children = Core::ProcessInfo::Iterator(_main.Id());
             return ((_startTime == TimePoint::min()) || (_main.IsActive() == true) ? 1 : 0) + _children.Count();
         }
+#if defined(THUNDER_VERSION) && THUNDER_VERSION >= 4
+        bool IsOperational() const override
+#else
         const bool IsOperational() const override
+#endif
         {
             uint32_t requiredProcesses = 0;
 
