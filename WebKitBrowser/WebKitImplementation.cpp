@@ -798,13 +798,6 @@ static GSourceFuncs _handlerIntervention =
                 ++_expiryCount;
 
                 if ( _expiryCount > (_watchDogTresholdInSeconds /  _watchDogTimeoutInSeconds) ) {
-                    if (_browser._outOfProcess == false) {
-                        // This is the Thunder process; signalling it would take every other plugin with it.
-                        SYSLOG(Logging::Error, (_T("Hang detected in browser thread. Deactivating the in-process browser.")));
-                        _browser.DeactivateBrowser(PluginHost::IShell::WATCHDOG_EXPIRED);
-                        return;
-                    }
-
                     pid_t pid = getpid();
                     SYSLOG(Logging::Error, (_T("Hang detected in browser thread in process %u. Sending SIGFPE."), pid));
                     if (syscall( __NR_tgkill, pid, pid, SIGFPE ) == -1) {
@@ -893,7 +886,6 @@ static GSourceFuncs _handlerIntervention =
             , _URL()
             , _dataPath()
             , _service(nullptr)
-            , _outOfProcess(true)
             , _headers()
             , _localStorageEnabled(false)
             , _httpStatusCode(-1)
@@ -2231,14 +2223,6 @@ static GSourceFuncs _handlerIntervention =
             _consoleLogPrefix = service->Callsign();
             #endif
             _service = service;
-
-            // Thunder picks in- or out-of-process from this very root config (see
-            // PluginHost::IShell::Root()), so read it back through the same class to
-            // be sure we cannot disagree with the decision it already made.
-            const WPEFramework::Plugin::Config::RootConfig rootConfig(service);
-            _outOfProcess = (rootConfig.Mode.IsSet() == true
-                                 ? (rootConfig.Mode.Value() != WPEFramework::Plugin::Config::RootConfig::ModeType::OFF)
-                                 : rootConfig.OutOfProcess.Value());
 
             _dataPath = service->DataPath();
 
@@ -3606,14 +3590,6 @@ static GSourceFuncs _handlerIntervention =
         void DeactivateBrowser(PluginHost::IShell::reason reason) {
             ASSERT(_service != nullptr);
             const char *reasonStr = Core::EnumerateType<PluginHost::IShell::reason>(reason).Data();
-
-            if (_outOfProcess == false) {
-                // Exiting here would take down Thunder itself, so hand the plugin back to the framework.
-                SYSLOG(Logging::Fatal, (_T("Deactivating the in-process browser, reason - %s"), (reasonStr ? reasonStr : "")));
-                Core::IWorkerPool::Instance().Submit(PluginHost::IShell::Job::Create(_service, PluginHost::IShell::DEACTIVATED, reason));
-                return;
-            }
-
             SYSLOG(Logging::Fatal, (_T("Posting a job to exit, reason - %s"), (reasonStr ? reasonStr : "")));
             postExitJob();
         }
@@ -3623,7 +3599,6 @@ static GSourceFuncs _handlerIntervention =
         string _URL;
         string _dataPath;
         PluginHost::IShell* _service;
-        bool _outOfProcess;
         string _headers;
         bool _localStorageEnabled;
         int32_t _httpStatusCode;
