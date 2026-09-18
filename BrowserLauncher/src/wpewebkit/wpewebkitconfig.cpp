@@ -63,6 +63,12 @@ unsigned long readLimits(const std::string cgroup_path, unsigned long defaultLim
 void setEnvVar(const char *varName, const std::string& value, bool replace)
 {
     // FIXME: setenv/putenv are not thread safe and may cause random crashes.
+    if (const char *env = g_getenv(varName); (env != nullptr) && (replace == false)) {
+        g_message(">%s = \"%s\"", varName, env);
+    } else {
+        g_message(" %s = \"%s\"", varName, value.c_str());
+    }
+
     g_setenv(varName, value.c_str(), replace);
 }
 
@@ -401,6 +407,7 @@ bool WpeWebKitConfig::setRialtoEnvironment() const
         "libgstaudiomixer.so",
         "libgstgio.so",
         "libgstinterleave.so",
+        "libgstlibav.so",
     };
 
     for (const std::string &pluginFileName : plugins)
