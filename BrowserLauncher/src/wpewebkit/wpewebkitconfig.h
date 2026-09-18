@@ -127,12 +127,7 @@ public:
     {
         return m_launchConfig->fireboltEndpoint();
     }
-
-    inline std::string fireboltExtensionPath() const
-    {
-        return m_launchConfig->fireboltExtensionPath();
-    }
-
+    
     inline bool enableFireboltExtension() const
     {
         return m_launchConfig->enableFireboltExtension();
