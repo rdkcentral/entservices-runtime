@@ -1340,7 +1340,7 @@ void WpeWebKitView::initWebExtensionsCallback(WebKitWebContext *context,
             g_variant_builder_add(&builder, "{sv}", "firebolt", g_variant_builder_end(&fireboltBuilder));
         } else {
             // MUST NEVER HAPPEN but this log would be helpful for debugging
-            g_critical("Firebolt endpoint not available for Extension");
+            g_warning("Firebolt endpoint not available for Extension");
         }
     }
 
