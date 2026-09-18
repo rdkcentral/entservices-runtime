@@ -123,6 +123,21 @@ public:
         return m_launchConfig->memoryMonitorUseContainerMode();
     }
 
+    inline std::string fireboltEndpoint() const
+    {
+        return m_launchConfig->fireboltEndpoint();
+    }
+
+    inline std::string fireboltExtensionPath() const
+    {
+        return m_launchConfig->fireboltExtensionPath();
+    }
+
+    inline bool enableFireboltExtension() const
+    {
+        return m_launchConfig->enableFireboltExtension();
+    }
+
 private:
     static std::string escapeJavascriptString(const std::string &str);
 
