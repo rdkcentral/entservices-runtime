@@ -21,7 +21,7 @@
 
 #define API_VERSION_NUMBER_MAJOR 1
 #define API_VERSION_NUMBER_MINOR 1
-#define API_VERSION_NUMBER_PATCH 16
+#define API_VERSION_NUMBER_PATCH 30
 
 namespace WPEFramework {
 
@@ -220,7 +220,7 @@ namespace Plugin {
 
         Core::ProxyType<Web::Response> result(PluginHost::IFactories::Instance().Response());
         Core::TextSegmentIterator index(
-            Core::TextFragment(request.Path, _skipURL, request.Path.length() - _skipURL), false, '/');
+            Core::TextFragment(request.Path, static_cast<uint32_t>(_skipURL), static_cast<uint32_t>(request.Path.length() - _skipURL)), false, '/');
 
         result->ErrorCode = Web::STATUS_BAD_REQUEST;
         result->Message = "Unknown error";
@@ -293,7 +293,7 @@ namespace Plugin {
             const string normalizedRoot = Core::Directory::Normalize(_persistentStoragePath);
 
             if (IsInsideStorage(normalizedPath, normalizedRoot) == false) {
-                TRACE(Trace::Error, (_T("Refusing to delete %s: outside of %s\n"), fullPath.c_str(), _persistentStoragePath.c_str()));
+                SYSLOG(Logging::Error, (_T("Refusing to delete %s: outside of %s\n"), fullPath.c_str(), _persistentStoragePath.c_str()));
                 return Core::ERROR_GENERAL;
             }
 
@@ -304,7 +304,7 @@ namespace Plugin {
             const bool success = dir.Destroy(true);
 #endif
             if (success == false) {
-                TRACE(Trace::Error, (_T("Failed to delete %s\n"), fullPath.c_str()));
+                SYSLOG(Logging::Error, (_T("Failed to delete %s\n"), fullPath.c_str()));
                 result = Core::ERROR_GENERAL;
             }
         }
@@ -333,6 +333,7 @@ namespace Plugin {
     {
         string message(string("{ \"url\": \"") + URL + string("\", \"loaded\": ") + (loaded ? string("true") : string("false")) + string(" }"));
         TRACE(Trace::Information, (_T("URLChanged: %s"), message.c_str()));
+        _lastURL.assign(URL);
         _service->Notify(message);
         Exchange::JWebBrowser::Event::URLChange(*this, URL, loaded);
     }
@@ -373,6 +374,8 @@ namespace Plugin {
     void WebKitBrowser::Deactivated(RPC::IRemoteConnection* connection)
     {
         if (connection->Id() == _connectionId) {
+
+            TRACE(Trace::Information, (_T("WebKitBrowser::Deactivated: { \"URL\": %.*s }"), 80, _lastURL.c_str()));
 
             ASSERT(_service != nullptr);
 
