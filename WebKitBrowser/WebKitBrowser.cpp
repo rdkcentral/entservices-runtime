@@ -293,7 +293,7 @@ namespace Plugin {
             const string normalizedRoot = Core::Directory::Normalize(_persistentStoragePath);
 
             if (IsInsideStorage(normalizedPath, normalizedRoot) == false) {
-                TRACE(Trace::Error, (_T("Refusing to delete %s: outside of %s\n"), fullPath.c_str(), _persistentStoragePath.c_str()));
+                SYSLOG(Logging::Error, (_T("Refusing to delete %s: outside of %s\n"), fullPath.c_str(), _persistentStoragePath.c_str()));
                 return Core::ERROR_GENERAL;
             }
 
@@ -304,7 +304,7 @@ namespace Plugin {
             const bool success = dir.Destroy(true);
 #endif
             if (success == false) {
-                TRACE(Trace::Error, (_T("Failed to delete %s\n"), fullPath.c_str()));
+                SYSLOG(Logging::Error, (_T("Failed to delete %s\n"), fullPath.c_str()));
                 result = Core::ERROR_GENERAL;
             }
         }

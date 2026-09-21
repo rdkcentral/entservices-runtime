@@ -1532,7 +1532,7 @@ static GSourceFuncs _handlerIntervention =
                 if (error) {
                     auto errorDomain = WKErrorCopyDomain(error);
                     auto errorDescription = WKErrorCopyLocalizedDescription(error);
-                    TRACE_GLOBAL(Trace::Error,
+                    SYSLOG(Logging::Error,
                                  (_T("GetCookies failed, error(code=%d, domain=%s, message=%s)"),
                                      WKErrorGetErrorCode(error),
                                      WKStringToString(errorDomain).c_str(),
@@ -2016,7 +2016,7 @@ static GSourceFuncs _handlerIntervention =
             Core::JSON::ArrayType<Core::JSON::String> array;
 
             if (!array.FromString(language, error)) {
-                TRACE(Trace::Error,
+                SYSLOG(Logging::Error,
                      (_T("Failed to parse languages array, error='%s', array='%s'\n"),
                       (error.IsSet() ? error.Value().Message().c_str() : "unknown"), language.c_str()));
                 return Core::ERROR_GENERAL;
