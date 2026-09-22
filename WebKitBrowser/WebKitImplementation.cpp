@@ -327,6 +327,8 @@ namespace Plugin {
                 , WebAudioEnabled(false)
                 , ServiceWorkerEnabled(false)
                 , ICECandidateFilteringEnabled()
+                , GstQuirks()
+                , GstHolePunchQuirk()
             {
                 Add(_T("useragent"), &UserAgent);
                 Add(_T("url"), &URL);
@@ -395,6 +397,8 @@ namespace Plugin {
                 Add(_T("webaudio"), &WebAudioEnabled);
                 Add(_T("serviceworker"), &ServiceWorkerEnabled);
                 Add(_T("icecandidatefiltering"), &ICECandidateFilteringEnabled);
+                Add(_T("gstquirks"), &GstQuirks);
+                Add(_T("gstholepunchquirk"), &GstHolePunchQuirk);
             }
             ~Config()
             {
@@ -468,6 +472,8 @@ namespace Plugin {
             Core::JSON::Boolean WebAudioEnabled;
             Core::JSON::Boolean ServiceWorkerEnabled;
             Core::JSON::Boolean ICECandidateFilteringEnabled;
+            Core::JSON::String GstQuirks;
+            Core::JSON::String GstHolePunchQuirk;
         };
 
         class HangDetector
@@ -1473,7 +1479,7 @@ namespace Plugin {
             Core::JSON::ArrayType<Core::JSON::String> array;
 
             if (!array.FromString(language, error)) {
-                TRACE(Trace::Error,
+                SYSLOG(Logging::Error,
                      (_T("Failed to parse languages array, error='%s', array='%s'\n"),
                       (error.IsSet() ? error.Value().Message().c_str() : "unknown"), language.c_str()));
                 return Core::ERROR_GENERAL;
@@ -1851,6 +1857,14 @@ namespace Plugin {
 
             if (height.empty() == false) {
                 Core::SystemInfo::SetEnvironment(_T("GST_VIRTUAL_DISP_HEIGHT"), height, !environmentOverride);
+            }
+
+            if (_config.GstQuirks.IsSet() == true) {
+                Core::SystemInfo::SetEnvironment(_T("WEBKIT_GST_QUIRKS"), _config.GstQuirks.Value(), !environmentOverride);
+            }
+
+            if (_config.GstHolePunchQuirk.IsSet() == true) {
+                Core::SystemInfo::SetEnvironment(_T("WEBKIT_GST_HOLE_PUNCH_QUIRK"), _config.GstHolePunchQuirk.Value(), !environmentOverride);
             }
 
             for (auto environmentVariableIndex = 0; environmentVariableIndex < _config.EnvironmentVariables.Length(); environmentVariableIndex++) {
@@ -2317,7 +2331,11 @@ namespace Plugin {
             }
 
             if (!_config.CertificateCheck) {
+#if WEBKIT_CHECK_VERSION(2, 38, 0)
+                webkit_website_data_manager_set_tls_errors_policy(webkit_web_context_get_website_data_manager(wkContext), WEBKIT_TLS_ERRORS_POLICY_IGNORE);
+#else
                 webkit_web_context_set_tls_errors_policy(wkContext, WEBKIT_TLS_ERRORS_POLICY_IGNORE);
+#endif
             }
 
             auto* languages = static_cast<char**>(g_new0(char*, _config.Languages.Length() + 1));
@@ -2397,10 +2415,12 @@ namespace Plugin {
                      "enable-service-worker", _config.ServiceWorkerEnabled.Value(), nullptr);
 
             // ICE candidate filtering
+            bool enableIceCandidateFiltering = false; // disable by default
             if (_config.ICECandidateFilteringEnabled.IsSet()) {
-                g_object_set(G_OBJECT(preferences),
-                     "enable-ice-candidate-filtering",  _config.ICECandidateFilteringEnabled.Value(), nullptr);
+                enableIceCandidateFiltering = _config.ICECandidateFilteringEnabled.Value();
             }
+            g_object_set(G_OBJECT(preferences),
+                "enable-ice-candidate-filtering",  enableIceCandidateFiltering, nullptr);
 
             _view = WEBKIT_WEB_VIEW(g_object_new(WEBKIT_TYPE_WEB_VIEW,
                 "backend", webkit_web_view_backend_new(wpe_view_backend_create(), nullptr, nullptr),
