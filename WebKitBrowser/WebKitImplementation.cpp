@@ -1532,7 +1532,7 @@ static GSourceFuncs _handlerIntervention =
                 if (error) {
                     auto errorDomain = WKErrorCopyDomain(error);
                     auto errorDescription = WKErrorCopyLocalizedDescription(error);
-                    TRACE_GLOBAL(Trace::Error,
+                    SYSLOG(Logging::Error,
                                  (_T("GetCookies failed, error(code=%d, domain=%s, message=%s)"),
                                      WKErrorGetErrorCode(error),
                                      WKStringToString(errorDomain).c_str(),
@@ -2016,7 +2016,7 @@ static GSourceFuncs _handlerIntervention =
             Core::JSON::ArrayType<Core::JSON::String> array;
 
             if (!array.FromString(language, error)) {
-                TRACE(Trace::Error,
+                SYSLOG(Logging::Error,
                      (_T("Failed to parse languages array, error='%s', array='%s'\n"),
                       (error.IsSet() ? error.Value().Message().c_str() : "unknown"), language.c_str()));
                 return Core::ERROR_GENERAL;
@@ -2943,7 +2943,11 @@ static GSourceFuncs _handlerIntervention =
             }
 
             if (!_config.CertificateCheck) {
+#if WEBKIT_CHECK_VERSION(2, 38, 0)
+                webkit_website_data_manager_set_tls_errors_policy(webkit_web_context_get_website_data_manager(wkContext), WEBKIT_TLS_ERRORS_POLICY_IGNORE);
+#else
                 webkit_web_context_set_tls_errors_policy(wkContext, WEBKIT_TLS_ERRORS_POLICY_IGNORE);
+#endif
             }
 
             auto* languages = static_cast<char**>(g_new0(char*, _config.Languages.Length() + 1));
