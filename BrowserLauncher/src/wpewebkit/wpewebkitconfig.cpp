@@ -168,13 +168,15 @@ bool WpeWebKitConfig::initExtensionDir()
 
     // default extensions, always loaded
     std::set<std::string> extensions {
-        "libWindowMinimizeExtension.so"
+        "libWindowMinimizeExtension.so",
+        "libWpeFireboltExtension.so",
     };
 
     // extensions loaded based on config
     if (m_launchConfig->enableConsoleLog())
         extensions.insert("libLogExtension.so");
 
+    g_print("runtime dir: %s\n", m_launchConfig->runtimeDir().c_str());
     std::string extDirectory = m_launchConfig->runtimeDir() + "/wpewebkit/extensions";
 
     // symlink the extensions
@@ -654,11 +656,19 @@ std::vector<std::string> WpeWebKitConfig::userScripts() const
         std::string script;
         std::stringstream scriptStream;
 
-        const std::string fireboltEndpoint = m_launchConfig->fireboltEndpoint();
-        if (!fireboltEndpoint.empty())
+        // Do not expose the firebolt endpoint if the runtime is configured to disable it, 
+        // as that would be a security risk. Some legacy apps (e.g. Older firebolt 1.17.0) use the presence of 
+        // the endpoint to detect if they are running in a supported environment, 
+        // so we need to keep the endpoint present in those cases, 
+        // but just not expose the actual URL.
+        if (m_launchConfig->injectFireboltEndpoint())
         {
-            scriptStream << "window.__firebolt = { endpoint: '"
-                         << escapeJavascriptString(fireboltEndpoint) << "' };\n";
+            const std::string fireboltEndpoint = m_launchConfig->fireboltEndpoint();
+            if (!fireboltEndpoint.empty())
+            {
+                scriptStream << "window.__firebolt = { endpoint: '"
+                             << escapeJavascriptString(fireboltEndpoint) << "' };\n";
+            }
         }
 
         // is this still needed ?
@@ -967,6 +977,54 @@ GVariantRef WpeWebKitConfig::commonExtensionSettings() const
     return GVariantRef { g_variant_builder_end(&builder) };
 }
 
+/*!
+    Returns a set of settings specific to the Firebolt extension.
+ */
+GVariantRef WpeWebKitConfig::fireboltExtensionSettings() const
+{
+    GVariantBuilder builder;
+    g_variant_builder_init(&builder, G_VARIANT_TYPE("a{sv}"));
+
+    // Enable wpeFireboltExtension by default
+    g_variant_builder_add(&builder, "{sv}", "wpeFireboltEnabled",
+                          g_variant_new_boolean(TRUE));
+
+    // GET WPE_FIREBOLT_EXTENSION environment variable is enabled
+    const char* fireboltExtensionEnv = g_getenv("WPE_FIREBOLT_EXTENSION");
+    // check if fireboltExtensionEnv is set to false, if not then inject the firebolt endpoint into the extension settings so it can be used by the extension
+
+    if (fireboltExtensionEnv && fireboltExtensionEnv[0] && strcmp(fireboltExtensionEnv, "false") == 0)
+    {
+        g_warning("WPE_FIREBOLT_EXTENSION environment variable is not set to true, firebolt extension will be disabled");
+        g_variant_builder_add(&builder, "{sv}", "wpeFireboltEnabled",
+                      g_variant_new_boolean(FALSE));
+    } else {
+        if (!m_launchConfig->fireboltEndpoint().empty())
+        {
+            g_variant_builder_add(&builder, "{sv}", "fireboltEndpoint",
+                          g_variant_new_string(m_launchConfig->fireboltEndpoint().c_str()));
+
+            // GET Firebolt User Script from static resources
+            const std::string fireboltUserScript = fireboltInjectScript();
+            if (!fireboltUserScript.empty()) {
+                g_variant_builder_add(&builder, "{sv}", "fireboltUserScript",
+                              g_variant_new_string(fireboltUserScript.c_str()));
+            }
+            else {
+                g_warning("FIREBOLT_USER_SCRIPT is not set, firebolt extension will be disabled");
+                 g_variant_builder_add(&builder, "{sv}", "wpeFireboltEnabled",
+                          g_variant_new_boolean(FALSE));
+            }
+        } else {
+            g_warning("WPE_FIREBOLT_EXTENSION environment variable is set to true but firebolt endpoint is not set, firebolt extension will be disabled");
+            g_variant_builder_add(&builder, "{sv}", "wpeFireboltEnabled",
+                          g_variant_new_boolean(FALSE));
+        }
+                      
+    }
+
+    return GVariantRef { g_variant_builder_end(&builder) };
+}
 
 /*!
     Returns an html page contents to display when an load-failure error occurs.
@@ -1020,4 +1078,37 @@ std::string WpeWebKitConfig::loadFailureErrorPage() const
     }
 
     return "<html><body>Error</body></html>";
+}
+
+/*!
+    Returns the firebolt-inject.js as a string content to be injected by the
+    WPE Browser extension. 
+ */
+
+std::string WpeWebKitConfig::fireboltInjectScript() const
+{
+    GError *error = nullptr;
+    g_print("loading firebolt inject script from resources\n");
+    GBytes *bytes = g_resources_lookup_data("/org/rdk/browser/extensions/firebolt-inject.js", G_RESOURCE_LOOKUP_FLAGS_NONE, &error);
+    g_print("finished loading firebolt inject script from resources\n");
+    if (bytes)
+    {
+        gsize sz;
+        const void *ptr = g_bytes_get_data(bytes, &sz);
+        if (ptr && sz)        {
+            std::string result(reinterpret_cast<const char*>(ptr), sz);
+            g_print("finished reading firebolt inject script data\n");
+            g_bytes_unref(bytes);
+            return result;
+        } else {
+            g_bytes_unref(bytes);
+            g_warning("failed to read firebolt inject script data from resources");
+        }
+    }
+    else if (error)
+    {
+        g_warning("failed to load firebolt inject script from resources, %s", error->message);
+        g_error_free(error); error = nullptr;
+    }
+    return "";
 }
