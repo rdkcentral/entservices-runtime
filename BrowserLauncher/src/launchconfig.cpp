@@ -111,17 +111,32 @@ namespace
         g_message("%s = %s", name, ss.str().c_str());
     }
 
+    bool ciEqual(const std::string& a, const std::string& b)
+    {
+        return std::equal(a.begin(), a.end(), b.begin(), b.end(), [](unsigned char a, unsigned char b)
+        {
+            return std::tolower(a) == std::tolower(b);
+        });
+    }
+
+    bool ciStartsWith(const std::string &s, const std::string &p)
+    {
+        return (s.size() >= p.size()) && std::equal(p.begin(), p.end(), s.begin(), [](unsigned char a, unsigned char b)
+        {
+            return std::tolower(a) == std::tolower(b);
+        });
+    }
+
     // internal
     //
     // A helper utility, converts a string value to the type of launch option.
     // It is probably full of subtle bugs, use with caution.
     template <typename T>
-    T processOption(const std::string& val)
+    T processOption(const std::string& val, bool invert = false)
     {
         if constexpr (std::is_same_v<T, bool>)
         {
-            return (val.empty() || val == "false" || val == "0")
-                ?  false : true;
+            return (val.empty() || ciEqual(val, "false") || (val == "0")) == invert;
         }
         else if constexpr (std::is_same_v<T, LocalFilePath>)
         {
@@ -152,11 +167,11 @@ namespace
         else if constexpr (std::is_same_v<T, LoadFailurePolicy>)
         {
             auto result = LoadFailurePolicy::Terminate;
-            if (val == "terminate")
+            if (ciEqual(val, "terminate"))
                 result = LoadFailurePolicy::Terminate;
-            else if (val == "display")
+            else if (ciEqual(val, "display"))
                 result = LoadFailurePolicy::Display;
-            else if (val == "ignore")
+            else if (ciEqual(val, "ignore"))
                 result = LoadFailurePolicy::Ignore;
             return result;
         }
@@ -190,8 +205,72 @@ namespace
         return homePrivateSizeBytes;
     }
 
-}  // namespace
+    std::string stringify(const json& j)
+    {
+        if(j.is_string())
+        {
+            return j.get<std::string>();
+        }
+        return j.dump();
+    }
 
+    void setProcessEnv(ProcessEnvironment &envs, const std::string &key, const std::string &val)
+    {
+        envs[key] = val;
+    }
+
+    enum key_match_e {
+        MATCH_POSITIVE  = 0,
+        MATCH_NEGATIVE  = 1,
+        MATCH_NONE      = 2
+    };
+
+    key_match_e matchKey(const std::string &key, const std::string &var, bool keyFlag = true)
+    {
+        auto ret = MATCH_NONE;
+        if (ciEqual(key, var))
+        {
+            ret = MATCH_POSITIVE;
+        }
+        else if (ciStartsWith(key, "enable"))
+        {
+            if (keyFlag)
+            {
+                ret = matchKey(key.substr(6), var, false);
+            }
+        }
+        else if (ciStartsWith(key, "disable"))
+        {
+            if (keyFlag)
+            {
+                ret = matchKey(key.substr(7), var, false);
+                if (ret == MATCH_POSITIVE)
+                {
+                    ret = MATCH_NEGATIVE;
+                }
+                else if (ret == MATCH_NEGATIVE)
+                {
+                    ret = MATCH_POSITIVE;
+                }
+            }
+        }
+        else if (ciStartsWith(var, "enable"))
+        {
+            if (ciEqual(key, var.substr(6)))
+            {
+                ret = MATCH_POSITIVE;
+            }
+        }
+        else if (ciStartsWith(var, "disable"))
+        {
+            if (ciEqual(key, var.substr(7)))
+            {
+                ret = MATCH_NEGATIVE;
+            }
+        }
+        return ret;
+    }
+}  // namespace
 
 LaunchConfig::LaunchConfig(const std::string &configPath)
 {
@@ -218,34 +297,40 @@ LaunchConfig::LaunchConfig(const std::string &configPath)
         if (configuration.contains("options"))
         {
             auto options = configuration["options"];
-            for (auto& [_, opt] : options.items())
+            for (auto& [key, val] : options.items())
             {
-                const auto& key = opt["key"].get<std::string>();
-                const auto& val = opt["value"].get<std::string>();
-
-#define HANDLE_RDK_CONFIG_OPTION(type_, name_, init_, help_)        \
-                if (key == #name_)                                  \
-                {                                                   \
-                    m_##name_ = processOption<type_>(val);          \
-                }                                                   \
-                else
-
-                FOR_EACH_RDK_CONFIG_OPTION(HANDLE_RDK_CONFIG_OPTION)
+                if (!val.is_primitive())
                 {
-                    g_message("Unknown option: %s", key.c_str());
+                    if (val.contains("key") && val["key"].is_primitive() &&
+                        val.contains("value") && val["value"].is_primitive())
+                    {
+                        applyOption(stringify(val["key"]), stringify(val["value"]));
+                    }
                 }
-#undef HANDLE_RDK_CONFIG_OPTION
+                else
+                {
+                    applyOption(key, stringify(val));
+                }
             }
         }
 
         if (configuration.contains("envs"))
         {
             auto envs = configuration["envs"];
-            for (auto& [_, opt] : envs.items())
+            for (auto& [key, val] : envs.items())
             {
-                const auto& key = opt["key"].get<std::string>();
-                const auto& val = opt["value"].get<std::string>();
-                m_browserEnvs[key] = val;
+                if (!val.is_primitive())
+                {
+                    if (val.contains("key") && val["key"].is_primitive() &&
+                        val.contains("value") && val["value"].is_primitive())
+                    {
+                        setProcessEnv(m_browserEnvs, stringify(val["key"]), stringify(val["value"]));
+                    }
+                }
+                else
+                {
+                    setProcessEnv(m_browserEnvs, key, stringify(val));
+                }
             }
         }
     } while (0);
@@ -350,17 +435,25 @@ void LaunchConfig::applyCmdLineOptions(std::map<std::string, std::string> option
 {
     for (const auto& [key, val] : options)
     {
-#define HANDLE_RDK_CONFIG_OPTION(type_, name_, init_, help_)        \
-        if (key == #name_)                                          \
-        {                                                           \
-            m_##name_ = processOption<type_>(val);                  \
-        }                                                           \
-        else
-
-        FOR_EACH_RDK_CONFIG_OPTION(HANDLE_RDK_CONFIG_OPTION)
-        {
-            g_message("Unknown option: %s", key.c_str());
-        }
-#undef HANDLE_RDK_CONFIG_OPTION
+        applyOption(key, val);
     }
+}
+
+bool LaunchConfig::applyOption(const std::string &key, const std::string &val)
+{
+    key_match_e match = MATCH_NONE;
+#define HANDLE_RDK_CONFIG_OPTION(type_, name_, init_, help_)            \
+    if ((match = matchKey(key, #name_)) != MATCH_NONE)             \
+    {                                                                   \
+        m_##name_ = processOption<type_>(val, match == MATCH_NEGATIVE); \
+    }                                                                   \
+    else
+
+    FOR_EACH_RDK_CONFIG_OPTION(HANDLE_RDK_CONFIG_OPTION)
+    {
+        g_message("Unknown option: %s", key.c_str());
+        return false;
+    }
+#undef HANDLE_RDK_CONFIG_OPTION
+    return true;
 }
