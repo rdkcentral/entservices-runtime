@@ -31,14 +31,18 @@ void InjectJS(WebKitScriptWorld* world, WebKitFrame* frame)
 
     JSCContext* jsContext = webkit_frame_get_js_context_for_script_world(frame, world);
 
-    static const char wpeNotifyThunder[] = "var wpe = {};\n"
-        "wpe.NotifyThunder = function() {\n"
-        "  let retval = new Array;\n"
-        "  for (let i = 0; i < arguments.length; i++) {\n"
-        "    retval[i] = arguments[i];\n"
-        "  }\n"
-        "  window.webkit.messageHandlers.wpeNotifyThunder.postMessage(retval);\n"
-        "}";
+    static const char wpeNotifyThunder[] = R"JS(
+        var wpe = {};
+        wpe.NotifyThunder = function() {
+        const handlers = window.webkit.messageHandlers;
+        const handler = handlers.wpeNotifyThunder || handlers.wpeNotifyWPEFramework;
+        handler.postMessage(Array.from(arguments));
+        };
+        wpe.NotifyWPEFramework = function() {
+        console.warn('wpe.NotifyWPEFramework is deprecated, use wpe.NotifyThunder');
+        return wpe.NotifyThunder.apply(this, arguments);
+        };
+    )JS";
     JSCValue* result = jsc_context_evaluate(jsContext, wpeNotifyThunder, -1);
     g_object_unref(result);
 
