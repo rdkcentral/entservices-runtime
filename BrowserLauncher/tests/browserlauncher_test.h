@@ -99,6 +99,8 @@ protected:
     LifecycleState _current_lc_state { LifecycleState::INITIALIZING };
     std::string _close_type { };
     bool _focused { false };
+    bool _lc_state_error { false };   // reply to Lifecycle2.state with an error
+    bool _focused_error { false };    // reply to Presentation.focused with an error
     IntentType _intent { IntentType::PRELOAD };
     int32_t _intent_id { 0 };
 

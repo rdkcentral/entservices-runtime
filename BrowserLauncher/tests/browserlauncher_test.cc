@@ -399,8 +399,13 @@ void BrowserLauncherTest::onFireboltMessage(const json& message)
         json result = {
             {"jsonrpc", "2.0"},
             {"id", id},
-            {"result", _current_lc_state}
+            {"result", toString(_current_lc_state)}
         };
+        if (_lc_state_error)
+        {
+            result.erase("result");
+            result["error"] = {{"code", -32603}, {"message", "Internal error"}};
+        }
         sendFireboltMessage(result);
     }
     else if (method == "Lifecycle2.close")
@@ -418,13 +423,18 @@ void BrowserLauncherTest::onFireboltMessage(const json& message)
         };
         sendFireboltMessage(result);
     }
-    else if (method == "Presentation.focus")
+    else if (method == "Presentation.focus" || method == "Presentation.focused")
     {
         json result = {
             {"jsonrpc", "2.0"},
             {"id", id},
             {"result", _focused}
         };
+        if (_focused_error)
+        {
+            result.erase("result");
+            result["error"] = {{"code", -32603}, {"message", "Internal error"}};
+        }
         sendFireboltMessage(result);
     }
     else if (method == "Actions.onIntent")

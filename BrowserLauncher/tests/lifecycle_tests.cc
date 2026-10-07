@@ -21,6 +21,7 @@
 #include <vector>
 #include <utility>
 #include <tuple>
+#include <optional>
 
 namespace {
 
@@ -130,6 +131,70 @@ void LifecycleStateTest::onConnectionClosed(SoupWebsocketConnection *connection)
         }
     }
     BrowserLauncherTest::onConnectionClosed(connection);
+}
+
+// The app already has a lifecycle state / focus when the launcher connects
+// (the events were sent before it subscribed): it reads them with
+// Lifecycle2.state and Presentation.focused.
+class InitialStateTest: public LifecycleStateTest
+{
+protected:
+    void onFireboltMessage(const json& message) override;
+
+    void loadTestPageInState(LifecycleState state, bool focused) {
+        _current_lc_state = state;
+        _focused = focused;
+        _intent = IntentType::EMPTY;
+        loadTestPage();
+    }
+
+    void expectPageState(const std::string& pageState, std::chrono::milliseconds timeout = 5s) {
+        bool timed_out = !runUntil([this, pageState] {
+            return _test_connection != nullptr && _page_state == pageState;
+        }, timeout);
+        EXPECT_FALSE(timed_out) << "timed out awaiting for page state: " << pageState;
+        EXPECT_EQ(_page_state, pageState);
+    }
+
+    void expectPageStateStays(const std::string& pageState) {
+        runUntil([] {
+            return false;
+        }, 500ms, 500ms);
+        EXPECT_EQ(_page_state, pageState);
+    }
+
+    // When set, a state change / focus change event is sent just before the
+    // reply to Lifecycle2.state / Presentation.focused, which still has the
+    // value read before the change.
+    std::optional<LifecycleState> _state_event_before_reply;
+    std::optional<bool> _focus_event_before_reply;
+};
+
+void InitialStateTest::onFireboltMessage(const json& message)
+{
+    const std::string method = message.value("method", "");
+
+    if (method == "Lifecycle2.state" && _state_event_before_reply)
+    {
+        const auto readState = _current_lc_state;
+        const auto newState = *std::exchange(_state_event_before_reply, std::nullopt);
+        changeLifecycleStateState(readState, newState, _focused, isPreloading());
+        _current_lc_state = readState;
+        LifecycleStateTest::onFireboltMessage(message);
+        _current_lc_state = newState;
+        return;
+    }
+    if (method == "Presentation.focused" && _focus_event_before_reply)
+    {
+        const bool readFocused = _focused;
+        const bool newFocused = *std::exchange(_focus_event_before_reply, std::nullopt);
+        changeLifecycleStateState(_current_lc_state, _current_lc_state, newFocused, isPreloading());
+        _focused = readFocused;
+        LifecycleStateTest::onFireboltMessage(message);
+        _focused = newFocused;
+        return;
+    }
+    LifecycleStateTest::onFireboltMessage(message);
 }
 
 }  // namespace
@@ -674,4 +739,65 @@ TEST_P(LifecycleStateTest, WindowMinimize)
 
 INSTANTIATE_TEST_SUITE_P(LifecycleStateTests,
                          LifecycleStateTest,
+                         ::testing::Values(false, true));
+
+TEST_P(InitialStateTest, InitialStatePaused)
+{
+    // the app is already PAUSED (not pre-loading): the page is shown
+    loadTestPageInState(LifecycleState::PAUSED, false);
+    expectPageState("passive");
+
+    // later events still apply
+    changeLifecycleStateState(LifecycleState::PAUSED, LifecycleState::ACTIVE, true, false);
+    expectPageState("active", 1s);
+}
+
+TEST_P(InitialStateTest, InitialStateActiveFocused)
+{
+    // the app is already ACTIVE and focused: the page is active
+    loadTestPageInState(LifecycleState::ACTIVE, true);
+    expectPageState("active");
+    expectPageStateStays("active");
+}
+
+TEST_P(InitialStateTest, InitialStateActiveFocusedError)
+{
+    // the focus cannot be read: ACTIVE but not focused
+    _focused_error = true;
+    loadTestPageInState(LifecycleState::ACTIVE, true);
+    expectPageState("passive");
+    expectPageStateStays("passive");
+}
+
+TEST_P(InitialStateTest, InitialStateError)
+{
+    // the state cannot be read: assume PAUSED (not pre-loading), the page is shown
+    _lc_state_error = true;
+    loadTestPageInState(LifecycleState::PAUSED, false);
+    expectPageState("passive");
+
+    changeLifecycleStateState(LifecycleState::PAUSED, LifecycleState::ACTIVE, true, false);
+    expectPageState("active", 1s);
+}
+
+TEST_P(InitialStateTest, StateEventBeforeInitialState)
+{
+    // the state changes to ACTIVE after it was read as PAUSED: the event wins
+    _state_event_before_reply = LifecycleState::ACTIVE;
+    loadTestPageInState(LifecycleState::PAUSED, true);
+    expectPageState("active");
+    expectPageStateStays("active");
+}
+
+TEST_P(InitialStateTest, FocusEventBeforeInitialFocus)
+{
+    // the focus changes after it was read as not focused: the event wins
+    _focus_event_before_reply = true;
+    loadTestPageInState(LifecycleState::ACTIVE, false);
+    expectPageState("active");
+    expectPageStateStays("active");
+}
+
+INSTANTIATE_TEST_SUITE_P(InitialStateTests,
+                         InitialStateTest,
                          ::testing::Values(false, true));
