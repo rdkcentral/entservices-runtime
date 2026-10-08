@@ -401,6 +401,7 @@ bool WpeWebKitConfig::setRialtoEnvironment() const
         "libgstid3demux.so",
         "libgsticydemux.so",
         "libgstwavparse.so",
+        "libgstlibav.so",
         "libgstinter.so",
         "libgstaudiomixer.so",
         "libgstgio.so",
