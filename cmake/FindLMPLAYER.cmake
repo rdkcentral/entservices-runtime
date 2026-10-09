@@ -27,8 +27,6 @@ find_package(PkgConfig)
 
 find_library(LMPLAYER_LIBRARIES NAMES mediaplayer)
 find_path(LMPLAYER_INCLUDE_DIRS NAMES libmediaplayer.h)
-#find_library(LMPLAYER_LIBRARIES NAMES ds)
-#find_path(LMPLAYER_INCLUDE_DIRS NAMES dsTypes.h PATH_SUFFIXES rdk/halif/ds-hal)
 message(STATUS "LMPLAYER_LIBRARIES is ${LMPLAYER_LIBRARIES}")
 message(STATUS "LMPLAYER_INCLUDE_DIRS is ${LMPLAYER_INCLUDE_DIRS}")
 
