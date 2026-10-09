@@ -23,30 +23,6 @@
 #include <glib.h>
 #include <gio/gio.h>
 
-using json = nlohmann::json;
-
-namespace Firebolt
-{
-
-struct Intent
-{
-    std::string action;
-    struct {
-        std::string source;
-    } context;
-};
-
-void from_json(const json& j, Intent& i)
-{
-    if (!j.is_discarded() && j.is_object())
-    {
-        j.at("action").get_to(i.action);
-        j.at("context").at("source").get_to(i.context.source);
-    }
-}
-
-}  // namespace Firebolt
-
 BrowserController::BrowserController(BrowserInterface *impl,
                                      std::shared_ptr<LaunchConfigInterface> launchConfig,
                                      std::string &&packageUrl)
@@ -133,8 +109,8 @@ void BrowserController::onFireboltConnected()
     // get launch intent
     {
         auto &actions = Firebolt::IFireboltAccessor::Instance().ActionsInterface();
-        Result<SubscriptionId> result = actions.subscribeOnIntent([this](const std::string& intent){
-            m_mainRunLoop->InvokeTask([this, intent = std::string{intent}]() {
+        Result<SubscriptionId> result = actions.subscribeOnIntent([this](const Firebolt::Actions::Intent& intent){
+            m_mainRunLoop->InvokeTask([this, intent = Firebolt::Actions::Intent{intent}]() {
                 onIntent(intent);
             });
         });
@@ -142,14 +118,14 @@ void BrowserController::onFireboltConnected()
         {
             g_warning("actions.subscribeOnIntent failed, error code = %d", static_cast<int32_t>(result.error()));
         }
-        Result<std::string> intent = actions.intent();
+        Result<Firebolt::Actions::Intent> intent = actions.intent();
         if (!intent)
         {
             g_warning("actions.intent failed, error code = %d", static_cast<int32_t>(intent.error()));
         }
         else
         {
-            m_mainRunLoop->InvokeTask([this, intent = std::string{intent.value()}]() {
+            m_mainRunLoop->InvokeTask([this, intent = Firebolt::Actions::Intent{intent.value()}]() {
                 onIntent(intent);
             });
         }
@@ -314,27 +290,16 @@ void BrowserController::onHdrFormatChanged(Firebolt::Device::HDRFormat hdrFormat
     m_browser->setScreenSupportsHDR(supportsHdr);
 }
 
-void BrowserController::onIntent(const std::string& intentStr)
+void BrowserController::onIntent(const Firebolt::Actions::Intent& intent)
 {
     g_assert(g_main_context_is_owner (g_main_context_default()));
 
-    g_message("intent = %s", intentStr.c_str());
+    m_isPreloading = false;
 
-    try
-    {
-        // Try parsing 'pre-load' intent as defined in
-        // https://wiki.rdkcentral.com/spaces/WG/pages/433962733/RDK8+Firebolt%C2%AE+Intents+Specification#RDK8Firebolt%C2%AEIntentsSpecification-Pre-loadactiontype
-        const char kPreloadAction[] = "pre-load";
-        const auto intentJson = json::parse(intentStr);
-        const auto intent = intentJson.at("intent").get<Firebolt::Intent>();
-        g_message("intent action = %s, source = %s", intent.action.c_str(), intent.context.source.c_str());
-        m_isPreloading = (0 == g_ascii_strncasecmp(intent.action.c_str(), kPreloadAction, strlen(kPreloadAction)));
-    }
-    catch (const json::exception& e)
-    {
-        g_warning("failed to parse intent. %s", e.what());
-        m_isPreloading = false;
-    }
+    static constexpr char kPreloadAction[] = "pre-load";
+    const Firebolt::Actions::IntentData& intentData = intent.intent;
+    g_message("intent action = %s, source = %s", intentData.action.c_str(), intentData.context.value_or(Firebolt::Actions::IntentContext()).source.value_or(std::string("<nil>")).c_str());
+    m_isPreloading = (g_ascii_strcasecmp(intentData.action.c_str(), kPreloadAction) == 0);
 
     if (!m_isPreloading)
     {
