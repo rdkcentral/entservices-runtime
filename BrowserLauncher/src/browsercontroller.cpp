@@ -160,12 +160,29 @@ void BrowserController::onFireboltConnected()
         auto &presentation = Firebolt::IFireboltAccessor::Instance().PresentationInterface();
         Result<SubscriptionId> result = presentation.subscribeOnFocusedChanged([this](const bool focused) {
             m_mainRunLoop->InvokeTask([this, focused]() {
+                m_focusEventReceived = true;
                 onFocusedChanged(focused);
             });
         });
         if (!result)
         {
             g_warning("presentation.subscribeOnFocusedChanged failed, error code = %d", static_cast<int32_t>(result.error()));
+        }
+        // Catch up with the current focus too (read before the lifecycle state
+        // below, so an ACTIVE state gets the right focus); if it cannot be read,
+        // keep assuming not focused.
+        Result<bool> focused = presentation.focused();
+        if (!focused)
+        {
+            g_warning("presentation.focused failed, error code = %d", static_cast<int32_t>(focused.error()));
+        }
+        else
+        {
+            m_mainRunLoop->InvokeTask([this, focused = focused.value()]() {
+                if (m_focusEventReceived)
+                    return;  // a real focus change event arrived meanwhile
+                onFocusedChanged(focused);
+            });
         }
         auto &lifecycle = Firebolt::IFireboltAccessor::Instance().LifecycleInterface();
         result = lifecycle.subscribeOnStateChanged([this](const std::vector<Lifecycle::StateChange>& changes) {
@@ -176,6 +193,36 @@ void BrowserController::onFireboltConnected()
         if (!result)
         {
             g_warning("lifecycle.subscribeOnStateChanged failed, error code = %d", static_cast<int32_t>(result.error()));
+        }
+
+        // The app may have reached its current lifecycle state before we were
+        // connected and subscribed (e.g. the RDK8-1.0.0 LifecycleManager moves a
+        // launched app to PAUSED as soon as its container runs and only makes it
+        // ACTIVE after the first frame). The page starts HIDDEN, so without the
+        // missed event it never renders and the app is never activated. Catch up
+        // with the current state; if it cannot be read, assume a plain launch
+        // (PAUSED, not pre-loaded), like an initial onStateChanged would say.
+        Result<Lifecycle::LifecycleState> current = lifecycle.state();
+        Lifecycle::LifecycleState currentState = Lifecycle::LifecycleState::PAUSED;
+        if (!current)
+        {
+            g_warning("lifecycle.state failed, error code = %d, assuming 'paused'", static_cast<int32_t>(current.error()));
+        }
+        else
+        {
+            currentState = current.value();
+        }
+        if (currentState != Lifecycle::LifecycleState::INITIALIZING)
+        {
+            m_mainRunLoop->InvokeTask([this, currentState]() {
+                if (m_lifecycleState != Lifecycle::LifecycleState::INITIALIZING)
+                    return;  // a real state change event arrived meanwhile
+                g_message("initial lifecycle state = 0x%x", static_cast<unsigned>(currentState));
+                Lifecycle::StateChange change;
+                change.oldState = Lifecycle::LifecycleState::INITIALIZING;
+                change.newState = currentState;
+                onLifecycleStateChanged({ change });
+            });
         }
     }
 

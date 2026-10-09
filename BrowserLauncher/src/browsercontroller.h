@@ -52,6 +52,7 @@ private:
     std::string m_packageUrl;
 
     bool m_isFocused { false };
+    bool m_focusEventReceived { false };
     bool m_isPreloading { false };
     Firebolt::Lifecycle::LifecycleState m_lifecycleState { Firebolt::Lifecycle::LifecycleState::INITIALIZING };
     std::unique_ptr<RunLoop> m_mainRunLoop;
