@@ -21,6 +21,7 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 #include <glib.h>
+#include <gio/gio.h>
 
 #include <chrono>
 #include <functional>
@@ -71,6 +72,8 @@ private:
     GSubprocessLauncher *_launcher { nullptr };
     GSubprocess *_runtime_process { nullptr };
     bool _should_break_event_loop { false };
+    GDataInputStream* _stdout_stream;
+    GDataInputStream* _stderr_stream;
 
     void onMessage(SoupWebsocketConnection *connection, const std::string& message_str);
     void sendMessage(SoupWebsocketConnection *connection, const json& message);
@@ -88,6 +91,9 @@ private:
         const char              *path,
         SoupWebsocketConnection *connection,
         gpointer                 user_data);
+
+    static void startStreamReader(GDataInputStream* stream,
+                                  gboolean isstderr);
 
 protected:
     GMainContext *_context { nullptr };
