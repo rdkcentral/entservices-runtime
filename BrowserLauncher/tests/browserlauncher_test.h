@@ -45,6 +45,8 @@ typedef struct _WstCompositor WstCompositor;
 typedef struct _EssCtx EssCtx;
 
 constexpr unsigned kTestServerPort = 8081;
+extern const char* kBrowserLauncherPath;
+extern const char* kLoaderAppPath;
 
 enum class LifecycleState
 {
@@ -59,7 +61,8 @@ enum class LifecycleState
 enum class IntentType
 {
     EMPTY,
-    PRELOAD
+    PRELOAD,
+    LAUNCH
 };
 
 std::ostream& operator<<(std::ostream& out, const LifecycleState&);
@@ -113,6 +116,8 @@ protected:
     gint64 _first_frame_ts { -1 };
     gint64 _first_request_ts { -1 };
     int _frame_count { 0 };
+    const char* _launcher_exe_path {
+      g_file_test(kLoaderAppPath, G_FILE_TEST_EXISTS) ? kLoaderAppPath : kBrowserLauncherPath };
 
     void SetUp() override {
         createMainLoop();

@@ -81,6 +81,8 @@ json intentJson(IntentType intent_type, const int32_t intentId = 0)
     {
         case IntentType::PRELOAD:
             return {{"intent",{{"action","pre-load"},{"context",{{"source","system"}}}}},{"intentId",intentId}};
+        case IntentType::LAUNCH:
+            return {{"intent",{{"action","launch"},{"context",{{"source","system"}}}}},{"intentId",intentId}};
         case IntentType::EMPTY:
         default:
             return {{"intent",""},{"intentId",intentId}};
@@ -114,6 +116,9 @@ std::ostream& operator<<(std::ostream& out, const LifecycleState& state) {
     return out << toString(state);
 }
 
+const char* kBrowserLauncherPath = "./BrowserLauncher";
+const char* kLoaderAppPath = "./loader_app";
+
 void BrowserLauncherTest::sendMessage(SoupWebsocketConnection *connection, const json& message)
 {
     EXPECT_NE(connection, nullptr);
@@ -134,8 +139,10 @@ void BrowserLauncherTest::createMainLoop()
 
 void BrowserLauncherTest::stopMainLoopAndServer()
 {
-    g_main_context_pop_thread_default(_context);
-    g_clear_pointer(&_context, g_main_context_unref);
+    if (_context) {
+      g_main_context_pop_thread_default(_context);
+      g_clear_pointer(&_context, g_main_context_unref);
+    }
     g_clear_pointer(&_loop, g_main_loop_unref);
     g_clear_pointer(&_server, g_object_unref);
 }
@@ -214,8 +221,7 @@ void BrowserLauncherTest::launchBrowser(const std::string& url, std::vector<std:
 #endif
 
     char **new_argv;
-    args.emplace_back("--url");
-    args.emplace_back(url);
+    args.emplace_back("--url="+url);
     new_argv = g_newa(char *, args.size() + 2);
     if (!new_argv)
     {
@@ -224,7 +230,7 @@ void BrowserLauncherTest::launchBrowser(const std::string& url, std::vector<std:
     else
     {
         unsigned i = 0;
-        new_argv[i++] = const_cast<char *>("./BrowserLauncher");
+        new_argv[i++] = const_cast<char *>(_launcher_exe_path);
         for (const auto &arg : args)
             new_argv[i++] = const_cast<char *>(arg.data());
         new_argv[i++] = nullptr;
@@ -348,7 +354,7 @@ void BrowserLauncherTest::changeLifecycleStateState(LifecycleState oldState, Lif
 
     if (isPreloading() != preloading)
     {
-        changeIntent(preloading ? IntentType::PRELOAD : IntentType::EMPTY);
+        changeIntent(preloading ? IntentType::PRELOAD : IntentType::LAUNCH);
     }
 
     if (_current_lc_state != newState)
