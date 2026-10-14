@@ -383,6 +383,7 @@ TEST_P(LifecycleStateTest, FirstFrameOnLoad)
 
         // change the intent while in paused state
         changeIntent(IntentType::LAUNCH);
+        preloading = false;
 
         // expected at least one frame rendered
         runUntil([this] {
