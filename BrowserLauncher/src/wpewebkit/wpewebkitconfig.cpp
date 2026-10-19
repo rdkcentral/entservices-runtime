@@ -417,6 +417,7 @@ bool WpeWebKitConfig::setRialtoEnvironment() const
         {
             g_warning("failed to find gst plugin '%s'",
                       pluginFileName.c_str());
+            continue;
         }
 
         fs::create_symlink(sysPath, newPath, ec);
