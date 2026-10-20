@@ -236,6 +236,16 @@ int main(int argc, char *argv[])
     // process the launch config (rdk.config and environment variables), we do
     // this early primarily so can determine if headless mode or not
     auto launchconfig = LaunchConfig::create(configPath ?: "");
+
+    // Apply the configuration overrides the container environment carries. The
+    // runtime package goes first so that the application package can override
+    // what the runtime package set, and both sit on top of the config file.
+    for (const auto* name : { "RUNTIME_CONFIG_OVERRIDES_JSON", "APP_CONFIG_OVERRIDES_JSON" })
+    {
+        if (const char* overrides = g_getenv(name); overrides != nullptr && *overrides != '\0')
+            launchconfig->applyConfigOverrides(name, overrides);
+    }
+
     launchconfig->applyCmdLineOptions(std::move(configOptions));
     launchconfig->printConfig();
 

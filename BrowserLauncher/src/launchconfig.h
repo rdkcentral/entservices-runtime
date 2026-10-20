@@ -52,9 +52,13 @@ public:
 #undef DECLARE_OPTION_ACCESSORS
 
     void applyCmdLineOptions(std::map<std::string, std::string>);
+    void applyConfigOverrides(const char* source, const std::string& overrides);
     void printConfig() const;
 
 private:
+    void applyOption(const std::string& key, const std::string& val);
+    void normalizeQuotas();
+
     int estimateLocalStorageQuota() const;
 
 #define DEFINE_OPTIONS(type_, name_, init_, help_)     \
