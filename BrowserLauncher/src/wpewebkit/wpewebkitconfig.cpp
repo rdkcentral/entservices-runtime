@@ -18,6 +18,7 @@
  */
 #include "wpewebkitconfig.h"
 #include "wpewebkitutils.h"
+#include "wpewebkit_2.46.h"
 
 #include <unistd.h>
 #include <sys/sysinfo.h>
@@ -173,6 +174,10 @@ bool WpeWebKitConfig::initExtensionDir()
     // extensions loaded based on config
     if (m_launchConfig->enableConsoleLog())
         extensions.insert("libLogExtension.so");
+
+    // firebolt extension enabled based on config
+    if (m_launchConfig->enableFireboltExtension() && !m_launchConfig->fireboltEndpoint().empty())
+        extensions.insert("libFireboltExtension.so");
 
     std::string extDirectory = m_launchConfig->runtimeDir() + "/wpewebkit/extensions";
 
@@ -400,6 +405,7 @@ bool WpeWebKitConfig::setRialtoEnvironment() const
         "libgstaudiomixer.so",
         "libgstgio.so",
         "libgstinterleave.so",
+        "libgstlibav.so",
     };
 
     for (const std::string &pluginFileName : plugins)
@@ -411,6 +417,7 @@ bool WpeWebKitConfig::setRialtoEnvironment() const
         {
             g_warning("failed to find gst plugin '%s'",
                       pluginFileName.c_str());
+            continue;
         }
 
         fs::create_symlink(sysPath, newPath, ec);
@@ -888,6 +895,28 @@ WebKitSettings* WpeWebKitConfig::webKitSettings() const
     {
         g_object_set(G_OBJECT(preferences), kOpportunisticSweepingAndGCPropName,
                      m_launchConfig->opportunisticSweepingAndGC() ? TRUE : FALSE, nullptr);
+    }
+
+    // Exclude pages with media elements from the back/forward cache. A suspended
+    // media pipeline keeps the hardware decoder allocated, so the next page cannot
+    // acquire one on devices that have a limited number of them.
+    if (webKitVersion >= VersionNumber(2, 46, 0))
+    {
+        WebKitFeatureList* featureList = webkit_settings_get_all_features();
+        if (featureList)
+        {
+            const gsize length = webkit_feature_list_get_length(featureList);
+            for (gsize i = 0; i < length; i++)
+            {
+                WebKitFeature* feature = webkit_feature_list_get(featureList, i);
+                if (g_strcmp0(webkit_feature_get_identifier(feature), "BackForwardCacheWithMedia") == 0)
+                {
+                    webkit_settings_set_feature_enabled(preferences, feature, FALSE);
+                    break;
+                }
+            }
+            webkit_feature_list_unref(featureList);
+        }
     }
 
     return preferences;

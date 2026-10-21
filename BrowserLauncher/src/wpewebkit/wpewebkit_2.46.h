@@ -44,4 +44,26 @@ void webkit_web_view_evaluate_javascript(WebKitWebView* web_view, const char* sc
 JSCValue* webkit_web_view_evaluate_javascript_finish(WebKitWebView* web_view, GAsyncResult* result, GError** error)
     __attribute__((weak));
 
+/* WebKitFeature API */
+typedef struct _WebKitFeatureList WebKitFeatureList;
+typedef struct _WebKitFeature WebKitFeature;
+
+WebKitFeatureList* webkit_settings_get_all_features(void)
+    __attribute__((weak));
+
+gsize webkit_feature_list_get_length(WebKitFeatureList* feature_list)
+    __attribute__((weak));
+
+WebKitFeature* webkit_feature_list_get(WebKitFeatureList* feature_list, gsize index)
+    __attribute__((weak));
+
+const char* webkit_feature_get_identifier(WebKitFeature* feature)
+    __attribute__((weak));
+
+void webkit_settings_set_feature_enabled(WebKitSettings* settings, WebKitFeature* feature, gboolean enabled)
+    __attribute__((weak));
+
+void webkit_feature_list_unref(WebKitFeatureList* feature_list)
+    __attribute__((weak));
+
 }

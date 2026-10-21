@@ -41,14 +41,28 @@ bool RedirectAllLogsToService(const string& target_service)
   const string kServiceExt = ".service";
   if (target_service.size() <= kServiceExt.size() ||
       target_service.substr(target_service.size() - kServiceExt.size(), kServiceExt.size()) != kServiceExt) {
-    fprintf(stderr, "RedirectLog: Invalid serivce name: *.service format expected\n");
+    fprintf(stderr, "RedirectLog: Invalid service name: *.service format expected\n");
+    return false;
+  }
+  // The name is concatenated into a cgroup path below, so it has to be a bare unit name.
+  if (target_service.find('/') != string::npos ||
+      target_service.find("..") != string::npos ||
+      target_service.find('\0') != string::npos ||
+      target_service.find('\n') != string::npos ||
+      target_service.find('\r') != string::npos) {
+    fprintf(stderr, "RedirectLog: Invalid service name: path separators, '..', or control characters are not allowed\n");
     return false;
   }
 
+  const bool isCGroupV2 = g_file_test("/sys/fs/cgroup/unified", G_FILE_TEST_EXISTS);
+  const string targetHierarchy  = isCGroupV2 ? "unified" : "systemd";
+  const string targetPIDList = isCGroupV2 ? "cgroup.procs" : "tasks";
+
   const string targetServiceName = target_service.substr(0, target_service.size() - kServiceExt.size());
-  const string kSystemdCgroupTargetTasksFilePath = "/sys/fs/cgroup/systemd/system.slice/" + target_service + "/tasks";
+  const string kSystemdCgroupTargetTasksFilePath = "/sys/fs/cgroup/" + targetHierarchy + "/system.slice/" + target_service + "/" + targetPIDList;
+
   if (!g_file_test(kSystemdCgroupTargetTasksFilePath.c_str(), G_FILE_TEST_EXISTS)) {
-    fprintf(stderr, "RedirectLog: %s unit cgroup doesn't exist\n", target_service.c_str());
+    fprintf(stderr, "RedirectLog: %s doesn't exist for unit %s\n", kSystemdCgroupTargetTasksFilePath.c_str(), target_service.c_str());
     return false;
   }
 
@@ -61,6 +75,12 @@ bool RedirectAllLogsToService(const string& target_service)
     if (f) {
       fprintf(f, "%s", taskDir.Name().c_str());
       fclose(f);
+
+      // In case of cgroup v2, it is enough to move just one task/thread
+      // to achieve migration of entire process
+      if (isCGroupV2)
+        break;
+
     } else {
       fprintf(stderr, "RedirectLog: cannot move %s thread to '%s': %s\n",
               taskDir.Name().c_str(), kSystemdCgroupTargetTasksFilePath.c_str(), strerror(errno));

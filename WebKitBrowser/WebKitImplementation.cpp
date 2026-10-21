@@ -26,42 +26,8 @@
 
 #include "Module.h"
 
-#ifdef WEBKIT_GLIB_API
 #include <wpe/webkit.h>
 #include "Tags.h"
-#else
-#include <WPE/WebKit.h>
-#include <WPE/WebKit/WKCookieManagerSoup.h>
-#include <WPE/WebKit/WKGeolocationManager.h> // TODO: add ref to this header in WebKit.h?
-#include <WPE/WebKit/WKGeolocationPermissionRequest.h>
-#include <WPE/WebKit/WKGeolocationPosition.h>
-#include <WPE/WebKit/WKNotification.h>
-#include <WPE/WebKit/WKNotificationManager.h>
-#include <WPE/WebKit/WKNotificationPermissionRequest.h>
-#include <WPE/WebKit/WKNotificationProvider.h>
-#include <WPE/WebKit/WKSoupSession.h>
-#include <WPE/WebKit/WKUserMediaPermissionRequest.h>
-#include <WPE/WebKit/WKErrorRef.h>
-
-#include "BrowserConsoleLog.h"
-#include "Tags.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-typedef pid_t WKProcessID;
-typedef void (*WKPageIsWebProcessResponsiveFunction)(bool isWebProcessResponsive, void* context);
-WK_EXPORT void WKPageIsWebProcessResponsive(WKPageRef page, void* context, WKPageIsWebProcessResponsiveFunction function);
-WK_EXPORT WKProcessID WKPageGetProcessIdentifier(WKPageRef page);
-WK_EXPORT void WKPreferencesSetPageCacheEnabled(WKPreferencesRef preferences, bool enabled);
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif
-
 #include <wpe/wpe.h>
 
 #include <glib.h>
@@ -78,15 +44,11 @@ WK_EXPORT void WKPreferencesSetPageCacheEnabled(WKPreferencesRef preferences, bo
 #include "LoggingUtils.h"
 #endif
 
-
-#if !WEBKIT_GLIB_API
-#define HAS_MEMORY_PRESSURE_SETTINGS_API 0
-#else
 #define HAS_MEMORY_PRESSURE_SETTINGS_API WEBKIT_CHECK_VERSION(2, 38, 0)
-#endif
 
 
-namespace Thunder {
+
+namespace WPEFramework {
 namespace Plugin {
 
 #ifndef WEBKIT_GLIB_API
@@ -2567,7 +2529,7 @@ static GSourceFuncs _handlerIntervention =
             GVariant* data = g_variant_new("(smsb)", std::to_string(browser->_guid).c_str(), !browser->_config.Whitelist.Value().empty() ? browser->_config.Whitelist.Value().c_str() : nullptr, browser->_config.LogToSystemConsoleEnabled.Value());
             webkit_web_context_set_web_extensions_initialization_user_data(context, data);
         }
-        static void wpeNotifyThunderMessageReceivedCallback(WebKitUserContentManager*, WebKitJavascriptResult* message, WebKitImplementation* browser)
+        static void wpeNotifyWPEFrameworkMessageReceivedCallback(WebKitUserContentManager*, WebKitJavascriptResult* message, WebKitImplementation* browser)
         {
             JSCValue* args = webkit_javascript_result_get_js_value(message);
             JSCValue* arrayLengthValue = jsc_value_object_get_property(args, "length");
@@ -2914,10 +2876,10 @@ static GSourceFuncs _handlerIntervention =
             }
 
             auto* userContentManager = webkit_web_view_get_user_content_manager(_view);
-            // webkit_user_content_manager_register_script_message_handler_in_world(userContentManager, "wpeNotifyThunder", std::to_string(_guid).c_str());
-            g_signal_connect(userContentManager, "script-message-received::wpeNotifyThunder",
-                reinterpret_cast<GCallback>(wpeNotifyThunderMessageReceivedCallback), this);
-            webkit_user_content_manager_register_script_message_handler(userContentManager, "wpeNotifyThunder");
+            // webkit_user_content_manager_register_script_message_handler_in_world(userContentManager, "wpeNotifyWPEFramework", std::to_string(_guid).c_str());
+            g_signal_connect(userContentManager, "script-message-received::wpeNotifyWPEFramework",
+                reinterpret_cast<GCallback>(wpeNotifyWPEFrameworkMessageReceivedCallback), this);
+            webkit_user_content_manager_register_script_message_handler(userContentManager, "wpeNotifyWPEFramework");
 
             SetupUserContentFilter();
             TryLoadingUserScripts();
@@ -2960,8 +2922,8 @@ static GSourceFuncs _handlerIntervention =
 
             if (frameDisplayedCallbackID)
                 webkit_web_view_remove_frame_displayed_callback(_view, frameDisplayedCallbackID);
-            // webkit_user_content_manager_unregister_script_message_handler_in_world(userContentManager, "wpeNotifyThunder", std::to_string(_guid).c_str());
-            webkit_user_content_manager_unregister_script_message_handler(userContentManager, "wpeNotifyThunder");
+            // webkit_user_content_manager_unregister_script_message_handler_in_world(userContentManager, "wpeNotifyWPEFramework", std::to_string(_guid).c_str());
+            webkit_user_content_manager_unregister_script_message_handler(userContentManager, "wpeNotifyWPEFramework");
 
             g_clear_object(&_view);
             g_main_context_pop_thread_default(_context);
@@ -2986,7 +2948,7 @@ static GSourceFuncs _handlerIntervention =
                 std::unique_ptr<gchar, GCharDeleter> bundlePath(
                     g_build_filename(_dataPath.c_str(), _config.InjectedBundle.Value().c_str(), nullptr) );
                 if (g_file_test(bundlePath.get(), G_FILE_TEST_EXISTS) == false) {
-                    bundlePath.reset( g_build_filename("/usr/share/Thunder/WebKitBrowser/", _config.InjectedBundle.Value().c_str(), nullptr) );
+                    bundlePath.reset( g_build_filename("/usr/share/WPEFramework/WebKitBrowser/", _config.InjectedBundle.Value().c_str(), nullptr) );
                 }
                 WKStringRef injectedBundlePathString = WKStringCreateWithUTF8CString(bundlePath.get());
                 WKContextConfigurationSetInjectedBundlePath(contextConfiguration, injectedBundlePathString);
@@ -3670,4 +3632,4 @@ static GSourceFuncs _handlerIntervention =
 #endif // !WEBKIT_GLIB_API
 } // namespace Plugin
 
-} // namespace Thunder
+} // namespace WPEFramework
