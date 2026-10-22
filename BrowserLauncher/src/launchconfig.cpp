@@ -349,18 +349,66 @@ void LaunchConfig::printConfig() const
 void LaunchConfig::applyCmdLineOptions(std::map<std::string, std::string> options)
 {
     for (const auto& [key, val] : options)
-    {
-#define HANDLE_RDK_CONFIG_OPTION(type_, name_, init_, help_)        \
-        if (key == #name_)                                          \
-        {                                                           \
-            m_##name_ = processOption<type_>(val);                  \
-        }                                                           \
-        else
+        applyOption(key, val);
+    normalizeQuotas();
+}
 
-        FOR_EACH_RDK_CONFIG_OPTION(HANDLE_RDK_CONFIG_OPTION)
-        {
-            g_message("Unknown option: %s", key.c_str());
-        }
-#undef HANDLE_RDK_CONFIG_OPTION
+void LaunchConfig::applyOption(const std::string& key, const std::string& val)
+{
+#define HANDLE_RDK_CONFIG_OPTION(type_, name_, init_, help_)        \
+    if (key == #name_)                                              \
+    {                                                               \
+        m_##name_ = processOption<type_>(val);                      \
+    }                                                               \
+    else
+
+    FOR_EACH_RDK_CONFIG_OPTION(HANDLE_RDK_CONFIG_OPTION)
+    {
+        g_message("Unknown option: %s", key.c_str());
     }
+#undef HANDLE_RDK_CONFIG_OPTION
+}
+
+// The override blobs the container environment carries, as defined by
+// urn:rdk:config:overrides in the OCI package spec. Each holds a flat map of
+// option name to value, naming the options declared in launchconfigoptions.h.
+void LaunchConfig::applyConfigOverrides(const char* source, const std::string& overrides)
+{
+    auto config = json::parse(overrides, nullptr, false, true);
+    if (config.is_discarded())
+    {
+        g_warning("Couldn't parse %s", source);
+        return;
+    }
+    if (!config.is_object())
+    {
+        g_warning("%s is not an object, ignoring", source);
+        return;
+    }
+
+    g_message("Applying overrides from %s", source);
+    for (auto& [key, val] : config.items())
+    {
+        if (!val.is_string())
+        {
+            g_warning("Option %s in %s is not a string, ignoring", key.c_str(), source);
+            continue;
+        }
+        applyOption(key, val.get<std::string>());
+    }
+    normalizeQuotas();
+}
+
+// The quota options carry sentinels the constructor resolves once the config
+// file has been read: a negative local storage quota means "estimate from the
+// data storage capacity", and a ratio outside 0-100 is not a ratio. Anything
+// applied after the constructor has to resolve them again, or the value reaches
+// WebKit unchecked and a documented -1 turns into a quota of 4294967295 bytes.
+void LaunchConfig::normalizeQuotas()
+{
+    if (m_localStorageQuotaBytes < 0)
+        m_localStorageQuotaBytes = estimateLocalStorageQuota();
+
+    if (m_indexedDBStorageQuotaRatio < 0 || m_indexedDBStorageQuotaRatio > 100)
+        m_indexedDBStorageQuotaRatio = 50;
 }
