@@ -235,7 +235,18 @@ int main(int argc, char *argv[])
 
     // process the launch config (rdk.config and environment variables), we do
     // this early primarily so can determine if headless mode or not
-    auto launchconfig = LaunchConfig::create(configPath ?: "");
+    std::shared_ptr<LaunchConfig> launchconfig;
+    try
+    {
+        launchconfig = LaunchConfig::create(configPath ?: "");
+    }
+    catch (const std::exception& e)
+    {
+        g_warning("Couldn't read the configuration in %s: %s. Options and envs are "
+                  "{\"key\": <string>, \"value\": <string>} entries; proceeding with defaults",
+                  configPath ?: "", e.what());
+        launchconfig = LaunchConfig::create("");
+    }
 
     // Apply the configuration overrides the container environment carries. The
     // runtime package goes first so that the application package can override
