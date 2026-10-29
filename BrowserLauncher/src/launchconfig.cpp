@@ -211,7 +211,12 @@ LaunchConfig::LaunchConfig(const std::string &configPath)
             break;
         }
         auto config = json::parse(ifs, nullptr, false, true);
-        if (config.is_discarded() || !config.contains("configuration"))
+        if (config.is_discarded())
+        {
+            g_warning("Couldn't parse %s, proceeding with defaults", configPath.c_str());
+            break;
+        }
+        if (!config.contains("configuration"))
             break;
 
         auto configuration = config["configuration"];
@@ -391,10 +396,18 @@ void LaunchConfig::applyConfigOverrides(const char* source, const std::string& o
     {
         if (!val.is_string())
         {
-            g_warning("Option %s in %s is not a string, ignoring", key.c_str(), source);
-            continue;
+            if (!val.is_primitive() || val.is_null())
+            {
+                g_warning("Option %s in %s is not a value, ignoring", key.c_str(), source);
+                continue;
+            }
+            g_warning("Option %s in %s is not a string, converting", key.c_str(), source);
         }
-        applyOption(key, val.get<std::string>());
+
+        std::string val_str = val.is_string() ? val.get<std::string>()
+                            : (val.is_number() && val == 0) ? "0"
+                            : val.dump();
+        applyOption(key, val_str);
     }
     normalizeQuotas();
 }
