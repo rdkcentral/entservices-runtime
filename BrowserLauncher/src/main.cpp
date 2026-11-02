@@ -242,10 +242,8 @@ int main(int argc, char *argv[])
     }
     catch (const std::exception& e)
     {
-        g_warning("Couldn't read the configuration in %s: %s. Options and envs are "
-                  "{\"key\": <string>, \"value\": <string>} entries; proceeding with defaults",
-                  configPath ?: "", e.what());
-        launchconfig = LaunchConfig::create("");
+        g_critical("Couldn't read the configuration in %s: %s", configPath ?: "", e.what());
+        return EXIT_FAILURE;
     }
 
     // Apply the configuration overrides the container environment carries. The
@@ -253,8 +251,19 @@ int main(int argc, char *argv[])
     // what the runtime package set, and both sit on top of the config file.
     for (const auto* name : { "RUNTIME_CONFIG_OVERRIDES_JSON", "APP_CONFIG_OVERRIDES_JSON" })
     {
-        if (const char* overrides = g_getenv(name); overrides != nullptr && *overrides != '\0')
+        const char* overrides = g_getenv(name);
+        if (overrides == nullptr || *overrides == '\0')
+            continue;
+
+        try
+        {
             launchconfig->applyConfigOverrides(name, overrides);
+        }
+        catch (const std::exception& e)
+        {
+            g_critical("Couldn't apply %s: %s", name, e.what());
+            return EXIT_FAILURE;
+        }
     }
 
     launchconfig->applyCmdLineOptions(std::move(configOptions));
