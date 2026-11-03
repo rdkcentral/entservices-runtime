@@ -210,16 +210,8 @@ LaunchConfig::LaunchConfig(const std::string &configPath)
             g_warning("Couldn't open config file at %s", configPath.c_str());
             break;
         }
-        auto config = json::parse(ifs, nullptr, false, true);
-        if (config.is_discarded())
-        {
-            g_warning("Couldn't parse %s, proceeding with defaults", configPath.c_str());
-            break;
-        }
-        if (!config.contains("configuration"))
-            break;
-
-        auto configuration = config["configuration"];
+        auto config = json::parse(ifs, nullptr, true, true);
+        auto configuration = config.at("configuration");
         if (configuration.contains("options"))
         {
             auto options = configuration["options"];
@@ -379,12 +371,7 @@ void LaunchConfig::applyOption(const std::string& key, const std::string& val)
 // option name to value, naming the options declared in launchconfigoptions.h.
 void LaunchConfig::applyConfigOverrides(const char* source, const std::string& overrides)
 {
-    auto config = json::parse(overrides, nullptr, false, true);
-    if (config.is_discarded())
-    {
-        g_warning("Couldn't parse %s", source);
-        return;
-    }
+    auto config = json::parse(overrides, nullptr, true, true);
     if (!config.is_object())
     {
         g_warning("%s is not an object, ignoring", source);
