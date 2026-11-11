@@ -235,15 +235,35 @@ int main(int argc, char *argv[])
 
     // process the launch config (rdk.config and environment variables), we do
     // this early primarily so can determine if headless mode or not
-    auto launchconfig = LaunchConfig::create(configPath ?: "");
+    std::shared_ptr<LaunchConfig> launchconfig;
+    try
+    {
+        launchconfig = LaunchConfig::create(configPath ?: "");
+    }
+    catch (const std::exception& e)
+    {
+        g_critical("Couldn't read the configuration in %s: %s", configPath ?: "", e.what());
+        return EXIT_FAILURE;
+    }
 
     // Apply the configuration overrides the container environment carries. The
     // runtime package goes first so that the application package can override
     // what the runtime package set, and both sit on top of the config file.
     for (const auto* name : { "RUNTIME_CONFIG_OVERRIDES_JSON", "APP_CONFIG_OVERRIDES_JSON" })
     {
-        if (const char* overrides = g_getenv(name); overrides != nullptr && *overrides != '\0')
+        const char* overrides = g_getenv(name);
+        if (overrides == nullptr || *overrides == '\0')
+            continue;
+
+        try
+        {
             launchconfig->applyConfigOverrides(name, overrides);
+        }
+        catch (const std::exception& e)
+        {
+            g_critical("Couldn't apply %s: %s", name, e.what());
+            return EXIT_FAILURE;
+        }
     }
 
     launchconfig->applyCmdLineOptions(std::move(configOptions));
