@@ -17,6 +17,8 @@
 
 set( BROWSER_LAUNCHER_VERSION "0.0.0" CACHE STRING "The version string to display in the logs" )
 
+option( ENABLE_BREAKPAD "Install a breakpad exception handler in the launcher" OFF )
+
 # Enable warnings
 add_compile_options( -Wall -Wno-psabi )
 
@@ -80,6 +82,18 @@ target_link_libraries(
         FireboltClient::FireboltClient
         FireboltTransport::FireboltTransport
         )
+
+if( ENABLE_BREAKPAD )
+    find_library( BREAKPADWRAPPER_LIBRARY NAMES breakpadwrapper REQUIRED )
+
+    target_link_libraries(
+            BrowserLauncher
+
+            -Wl,--push-state,--no-as-needed
+            ${BREAKPADWRAPPER_LIBRARY}
+            -Wl,--pop-state
+            )
+endif()
 
 target_include_directories(
         BrowserLauncher
