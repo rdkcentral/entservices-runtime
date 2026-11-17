@@ -21,6 +21,10 @@
 #include <gio/gio.h>
 #include <libsoup/soup.h>
 
+#include <cstdio>
+#include <sys/uio.h>
+#include <unistd.h>
+
 #if defined(HAVE_WESTEROS_COMPOSITOR)
 #include <westeros-compositor.h>
 #include <essos.h>
@@ -77,10 +81,33 @@ json intentJson(IntentType intent_type, const int32_t intentId = 0)
     {
         case IntentType::PRELOAD:
             return {{"intent",{{"action","pre-load"},{"context",{{"source","system"}}}}},{"intentId",intentId}};
+        case IntentType::LAUNCH:
+            return {{"intent",{{"action","launch"},{"context",{{"source","system"}}}}},{"intentId",intentId}};
         case IntentType::EMPTY:
         default:
             return {{"intent",""},{"intentId",intentId}};
     }
+}
+
+void logLine(int fd, const char* message, size_t msg_len)
+{
+  if (!message)
+    return;
+
+  struct iovec iov[2];
+  guint i = 0;
+
+  iov[i].iov_base = const_cast<char*>(message);
+  iov[i].iov_len = msg_len;
+  ++i;
+
+  if (msg_len && message[msg_len - 1] != '\n') {
+    iov[i].iov_base = const_cast<char*>("\n");
+    iov[i].iov_len = 1;
+    ++i;
+  }
+
+  TEMP_FAILURE_RETRY(writev(fd, iov, i));
 }
 
 }  // namespace
@@ -88,6 +115,9 @@ json intentJson(IntentType intent_type, const int32_t intentId = 0)
 std::ostream& operator<<(std::ostream& out, const LifecycleState& state) {
     return out << toString(state);
 }
+
+const char* kBrowserLauncherPath = "./BrowserLauncher";
+const char* kLoaderAppPath = "./loader_app";
 
 void BrowserLauncherTest::sendMessage(SoupWebsocketConnection *connection, const json& message)
 {
@@ -109,8 +139,10 @@ void BrowserLauncherTest::createMainLoop()
 
 void BrowserLauncherTest::stopMainLoopAndServer()
 {
-    g_main_context_pop_thread_default(_context);
-    g_clear_pointer(&_context, g_main_context_unref);
+    if (_context) {
+      g_main_context_pop_thread_default(_context);
+      g_clear_pointer(&_context, g_main_context_unref);
+    }
     g_clear_pointer(&_loop, g_main_loop_unref);
     g_clear_pointer(&_server, g_object_unref);
 }
@@ -165,7 +197,9 @@ void BrowserLauncherTest::launchBrowser(const std::string& url, std::vector<std:
     GError *error = nullptr;
     _launcher = g_subprocess_launcher_new(
         static_cast<GSubprocessFlags>(G_SUBPROCESS_FLAGS_INHERIT_FDS |
-                                      G_SUBPROCESS_FLAGS_SEARCH_PATH_FROM_ENVP));
+                                      G_SUBPROCESS_FLAGS_SEARCH_PATH_FROM_ENVP |
+                                      G_SUBPROCESS_FLAGS_STDOUT_PIPE |
+                                      G_SUBPROCESS_FLAGS_STDERR_PIPE));
 
     if (_server_port > 0)
     {
@@ -187,8 +221,7 @@ void BrowserLauncherTest::launchBrowser(const std::string& url, std::vector<std:
 #endif
 
     char **new_argv;
-    args.emplace_back("--url");
-    args.emplace_back(url);
+    args.emplace_back("--url="+url);
     new_argv = g_newa(char *, args.size() + 2);
     if (!new_argv)
     {
@@ -197,7 +230,7 @@ void BrowserLauncherTest::launchBrowser(const std::string& url, std::vector<std:
     else
     {
         unsigned i = 0;
-        new_argv[i++] = const_cast<char *>("./BrowserLauncher");
+        new_argv[i++] = const_cast<char *>(_launcher_exe_path);
         for (const auto &arg : args)
             new_argv[i++] = const_cast<char *>(arg.data());
         new_argv[i++] = nullptr;
@@ -209,6 +242,13 @@ void BrowserLauncherTest::launchBrowser(const std::string& url, std::vector<std:
     _runtime_process = g_subprocess_launcher_spawnv(_launcher, new_argv, &error);
     EXPECT_EQ(error, nullptr);
     EXPECT_NE(_runtime_process, nullptr);
+
+    _stdout_stream =
+      g_data_input_stream_new(g_subprocess_get_stdout_pipe(_runtime_process));
+    _stderr_stream =
+      g_data_input_stream_new(g_subprocess_get_stderr_pipe(_runtime_process));
+    startStreamReader(_stdout_stream, FALSE);
+    startStreamReader(_stderr_stream, TRUE);
 }
 
 void BrowserLauncherTest::stopBrowser()
@@ -251,6 +291,8 @@ void BrowserLauncherTest::stopBrowser()
     g_clear_pointer(&cancellable, g_object_unref);
     g_clear_pointer(&_runtime_process, g_object_unref);
     g_clear_pointer(&_launcher, g_object_unref);
+    g_clear_object(&_stdout_stream);
+    g_clear_object(&_stderr_stream);
 
     EXPECT_EQ(_runtime_process, nullptr);
 }
@@ -312,7 +354,7 @@ void BrowserLauncherTest::changeLifecycleStateState(LifecycleState oldState, Lif
 
     if (isPreloading() != preloading)
     {
-        changeIntent(preloading ? IntentType::PRELOAD : IntentType::EMPTY);
+        changeIntent(preloading ? IntentType::PRELOAD : IntentType::LAUNCH);
     }
 
     if (_current_lc_state != newState)
@@ -703,4 +745,30 @@ void BrowserLauncherTest::destroyCompositor()
     g_clear_pointer(&_compositor, WstCompositorDestroy);
     g_clear_pointer(&_ess_ctx, EssContextDestroy);
 #endif
+}
+
+void BrowserLauncherTest::startStreamReader(GDataInputStream* stream,
+                                            gboolean isstderr)
+{
+  gint priority = G_PRIORITY_DEFAULT;
+  g_data_input_stream_read_line_async(
+      stream, priority, nullptr,
+      [](GObject* src, GAsyncResult* res, gpointer userData) {
+        auto* stream = G_DATA_INPUT_STREAM(src);
+        gsize len = 0;
+        gchar* line =
+            g_data_input_stream_read_line_finish(stream, res, &len, NULL);
+        if (line) {
+          gboolean isstderr = GPOINTER_TO_INT(userData);
+          if (isstderr)
+            logLine(STDERR_FILENO, line, len);
+          else
+            logLine(STDOUT_FILENO, line, len);
+          g_free(line);
+          startStreamReader(stream, isstderr);
+        } else {
+          // EOF or error — close silently.
+        }
+      },
+      GINT_TO_POINTER(isstderr));
 }

@@ -21,10 +21,15 @@
   const url = `ws://${location.host}/test_socket`;
 
   const drawOnce = () => {
-      const canvas = document.querySelector("#gl-canvas");
-      const gl = canvas.getContext("webgl");
-      gl.clearColor(0.0, 0.5, 0.0, 1.0);
-      gl.clear(gl.COLOR_BUFFER_BIT);
+      try {
+          const canvas = document.querySelector("#gl-canvas");
+          const gl = canvas.getContext("webgl");
+          gl.clearColor(0.0, 0.5, 0.0, 1.0);
+          gl.clear(gl.COLOR_BUFFER_BIT);
+          console.log('Did draw first frame!');
+      } catch(e) {
+          console.error('First frame draw failed.', e);
+      }
   }
 
   const getState = () => {
@@ -51,10 +56,21 @@
           console.log('Message from server: ' + event.data);
           let msg = JSON.parse(event.data)
           if(msg.method === "Window.close") {
-              setTimeout(() => window.close(), 0);
+              setTimeout(function() {
+                  if ('h5vcc' in window)
+                      h5vcc.system.exit();
+                  else
+                      window.close();
+              }, 0);
           }
           else if(msg.method === "Window.minimize") {
-              setTimeout(() => window.minimize(), 0);
+              setTimeout(function() {
+                  if ('h5vcc' in window) {
+                      console.log("User exit strategy =", h5vcc.system.userOnExitStrategy);
+                      h5vcc.system.exit();
+                  } else
+                      window.minimize();
+              }, 0);
           }
       });
       socket.addEventListener('close', (event) => {
@@ -80,10 +96,7 @@
           createTestWebSocket();
       }
       if (oldState === 'frozen' || oldState === 'initializing') {
-          // requestAnimationFrame(() => {
-              drawOnce();
-              console.log('Did draw first frame!');
-          // });
+          drawOnce();
       }
       sendMessageToServer({id,method:"LifecycleTest.onStateChanged",params:{oldState,newState,eventType}});
       if (newState === 'frozen') {

@@ -21,6 +21,7 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 #include <glib.h>
+#include <gio/gio.h>
 
 #include <chrono>
 #include <functional>
@@ -44,6 +45,8 @@ typedef struct _WstCompositor WstCompositor;
 typedef struct _EssCtx EssCtx;
 
 constexpr unsigned kTestServerPort = 8081;
+extern const char* kBrowserLauncherPath;
+extern const char* kLoaderAppPath;
 
 enum class LifecycleState
 {
@@ -58,7 +61,8 @@ enum class LifecycleState
 enum class IntentType
 {
     EMPTY,
-    PRELOAD
+    PRELOAD,
+    LAUNCH
 };
 
 std::ostream& operator<<(std::ostream& out, const LifecycleState&);
@@ -71,6 +75,8 @@ private:
     GSubprocessLauncher *_launcher { nullptr };
     GSubprocess *_runtime_process { nullptr };
     bool _should_break_event_loop { false };
+    GDataInputStream* _stdout_stream;
+    GDataInputStream* _stderr_stream;
 
     void onMessage(SoupWebsocketConnection *connection, const std::string& message_str);
     void sendMessage(SoupWebsocketConnection *connection, const json& message);
@@ -88,6 +94,9 @@ private:
         const char              *path,
         SoupWebsocketConnection *connection,
         gpointer                 user_data);
+
+    static void startStreamReader(GDataInputStream* stream,
+                                  gboolean isstderr);
 
 protected:
     GMainContext *_context { nullptr };
@@ -107,6 +116,8 @@ protected:
     gint64 _first_frame_ts { -1 };
     gint64 _first_request_ts { -1 };
     int _frame_count { 0 };
+    const char* _launcher_exe_path {
+      g_file_test(kLoaderAppPath, G_FILE_TEST_EXISTS) ? kLoaderAppPath : kBrowserLauncherPath };
 
     void SetUp() override {
         createMainLoop();

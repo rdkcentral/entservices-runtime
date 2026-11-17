@@ -25,7 +25,7 @@
 
 using json = nlohmann::json;
 
-namespace Firebolt
+namespace
 {
 
 struct Intent
@@ -45,7 +45,7 @@ void from_json(const json& j, Intent& i)
     }
 }
 
-}  // namespace Firebolt
+}  // namespace
 
 BrowserController::BrowserController(BrowserInterface *impl,
                                      std::shared_ptr<LaunchConfigInterface> launchConfig,
@@ -133,24 +133,24 @@ void BrowserController::onFireboltConnected()
     // get launch intent
     {
         auto &actions = Firebolt::IFireboltAccessor::Instance().ActionsInterface();
-        Result<SubscriptionId> result = actions.subscribeOnIntent([this](const std::string& intent){
-            m_mainRunLoop->InvokeTask([this, intent = std::string{intent}]() {
-                onIntent(intent);
+        Result<SubscriptionId> result = actions.subscribeOnIntent([this](const Actions::Intent& intent){
+            m_mainRunLoop->InvokeTask([this, intent = Actions::Intent{intent}]() {
+                onIntent(std::move(intent));
             });
         });
         if (!result)
         {
             g_warning("actions.subscribeOnIntent failed, error code = %d", static_cast<int32_t>(result.error()));
         }
-        Result<std::string> intent = actions.intent();
+        Result<Firebolt::Actions::Intent> intent = actions.intent();
         if (!intent)
         {
             g_warning("actions.intent failed, error code = %d", static_cast<int32_t>(intent.error()));
         }
         else
         {
-            m_mainRunLoop->InvokeTask([this, intent = std::string{intent.value()}]() {
-                onIntent(intent);
+            m_mainRunLoop->InvokeTask([this, intent = Actions::Intent{*intent}]() {
+                onIntent(std::move(intent));
             });
         }
     }
@@ -225,8 +225,14 @@ void BrowserController::onBrowserClose(CloseReason reason)
             return;  // keep the browser running
         }
         case CloseReason::UNLOAD:
-            lifecycle.close(Firebolt::Lifecycle::CloseType::UNLOAD);
+        {
+            auto result =  lifecycle.close(Firebolt::Lifecycle::CloseType::UNLOAD);
+            if (!result)
+            {
+                g_warning("Lifecycle.close(unload) failed, error: %d", static_cast<int32_t>(result.error()));
+            }
             break;
+        }
         case CloseReason::ERROR:
         default:
             break;
@@ -314,21 +320,20 @@ void BrowserController::onHdrFormatChanged(Firebolt::Device::HDRFormat hdrFormat
     m_browser->setScreenSupportsHDR(supportsHdr);
 }
 
-void BrowserController::onIntent(const std::string& intentStr)
+void BrowserController::onIntent(Firebolt::Actions::Intent intent)
 {
     g_assert(g_main_context_is_owner (g_main_context_default()));
 
-    g_message("intent = %s", intentStr.c_str());
+    g_message("intent = %s", intent.intent.c_str());
 
     try
     {
-        // Try parsing 'pre-load' intent as defined in
-        // https://wiki.rdkcentral.com/spaces/WG/pages/433962733/RDK8+Firebolt%C2%AE+Intents+Specification#RDK8Firebolt%C2%AEIntentsSpecification-Pre-loadactiontype
+        // Try parsing 'pre-load' intent as defined in https://wiki.rdkcentral.com/x/xh1AHg
         const char kPreloadAction[] = "pre-load";
-        const auto intentJson = json::parse(intentStr);
-        const auto intent = intentJson.at("intent").get<Firebolt::Intent>();
-        g_message("intent action = %s, source = %s", intent.action.c_str(), intent.context.source.c_str());
-        m_isPreloading = (0 == g_ascii_strncasecmp(intent.action.c_str(), kPreloadAction, strlen(kPreloadAction)));
+        const auto intentJson = json::parse(intent.intent);
+        const auto intentParams = intentJson.get<::Intent>();
+        g_message("intent action = %s, source = %s", intentParams.action.c_str(), intentParams.context.source.c_str());
+        m_isPreloading = (0 == g_ascii_strncasecmp(intentParams.action.c_str(), kPreloadAction, strlen(kPreloadAction)));
     }
     catch (const json::exception& e)
     {

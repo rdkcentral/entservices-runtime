@@ -28,6 +28,11 @@ namespace {
 class MediaCapabilitiesTest: public BrowserLauncherTest
 {
 protected:
+    void SetUp() override {
+        _intent = IntentType::LAUNCH;
+        BrowserLauncherTest::SetUp();
+    }
+
     void onFireboltMessage(const json& message) override;
     void onTestMessage(const json& message) override;
 
@@ -154,7 +159,8 @@ TEST_P(HdrSupportTest, InitialHdrSetting)
     if (HasFatalFailure())
         return;
 
-    changeLifecycleStateState(LifecycleState::INITIALIZING, LifecycleState::ACTIVE, true, false);
+    for (const auto newState : {LifecycleState::PAUSED, LifecycleState::ACTIVE})
+      changeLifecycleStateState(_current_lc_state, newState, true, false);
 
     unsigned id = _req_id++;
     json req = {
@@ -200,7 +206,8 @@ TEST_P(HdrSupportTest, HdrSettingChange)
         EXPECT_FALSE(timed_out) << "timed out waiting for browser launcher";
     }
 
-    changeLifecycleStateState(LifecycleState::INITIALIZING, LifecycleState::ACTIVE, true, false);
+    for (const auto newState : {LifecycleState::PAUSED, LifecycleState::ACTIVE})
+      changeLifecycleStateState(_current_lc_state, newState, true, false);
 
     for (int i = 0; i < 2; ++i)
     {
@@ -280,7 +287,8 @@ TEST_P(DecodingInfoTest, CodecSupport)
     if (HasFatalFailure())
         return;
 
-    changeLifecycleStateState(LifecycleState::INITIALIZING, LifecycleState::ACTIVE, true, false);
+    for (const auto newState : {LifecycleState::PAUSED, LifecycleState::ACTIVE})
+      changeLifecycleStateState(_current_lc_state, newState, true, false);
 
     unsigned id = _req_id++;
     json req = {
@@ -349,7 +357,7 @@ std::vector<DecodingInfoTestConfig> GetDecodingInfoTestConfigs() {
             ._video = {
                 {
                     ._content_type = "video/mp4;codecs=\"avc1.42000a\"",
-                    ._width = 1080,
+                    ._width = 1280,
                     ._height = 720,
                     ._framerate = 30.0,
                     ._bitrate = 10000
@@ -361,7 +369,7 @@ std::vector<DecodingInfoTestConfig> GetDecodingInfoTestConfigs() {
             ._video = {
                 {
                     ._content_type = "video/mp4;codecs=\"hev1.1.6.L93.B0\"",
-                    ._width = 1080,
+                    ._width = 1280,
                     ._height = 720,
                     ._framerate = 30.0,
                     ._bitrate = 10000
@@ -373,7 +381,7 @@ std::vector<DecodingInfoTestConfig> GetDecodingInfoTestConfigs() {
             ._video = {
                 {
                     ._content_type = "video/mp4;codecs=\"av01.0.00M.08\"",
-                    ._width = 1080,
+                    ._width = 1280,
                     ._height = 720,
                     ._framerate = 30.0,
                     ._bitrate = 10000
